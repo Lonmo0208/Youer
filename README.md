@@ -30,7 +30,7 @@
 ## 📊 Progress Status
 
 ✅ **Core Integration**
-- [x] NeoForge ([69a631b65](https://github.com/neoforged/NeoForge/commit/69a631b65))
+- [x] NeoForge ([8d619fa](https://github.com/neoforged/NeoForge/commit/8d619fa))
 - [x] Bukkit API ([69fa4695](https://hub.spigotmc.org/stash/projects/SPIGOT/repos/bukkit/commits/69fa4695))
 - [x] CraftBukkit ([19bf84656](https://hub.spigotmc.org/stash/projects/SPIGOT/repos/craftbukkit/commits/19bf84656))
 - [x] Spigot ([a759b629](https://hub.spigotmc.org/stash/projects/SPIGOT/repos/spigot/commits/a759b629))
@@ -46,15 +46,15 @@
 
 ## ⚙️ Technical Stack
 
-| Component   | Source                                                              | Purpose        | Status |
-|-------------|---------------------------------------------------------------------|----------------|--------|
-| NeoForge    | [GitHub](https://github.com/neoforged/NeoForge.git)                 | Mod support    | ✅      |
-| Bukkit      | [Spigot](https://hub.spigotmc.org/stash/scm/spigot/bukkit.git)      | Plugin support | ✅      |
-| CraftBukkit | [Spigot](https://hub.spigotmc.org/stash/scm/spigot/craftbukkit.git) | Plugin support | ✅      |
-| Spigot      | [Spigot](https://hub.spigotmc.org/stash/scm/spigot/spigot.git)      | Plugin support | ✅      |
-| Paper       | [GitHub](https://github.com/PaperMC/Paper.git)                      | Plugin support | 🔄     |
-| PurPur      | [GitHub](https://github.com/PurpurMC/Purpur.git)                    | Plugin support | 🔄     |
-| Arclight    | [GitHub](https://github.com/IzzelAliz/Arclight.git)                 | Remapping      | ✅      |
+| Component   | Source                                                              | Purpose                      | Status |
+|-------------|---------------------------------------------------------------------|------------------------------|--------|
+| NeoForge    | [GitHub](https://github.com/neoforged/NeoForge.git)                 | Mod support                  | ✅      |
+| Bukkit      | [Spigot](https://hub.spigotmc.org/stash/scm/spigot/bukkit.git)      | Plugin support               | ✅      |
+| CraftBukkit | [Spigot](https://hub.spigotmc.org/stash/scm/spigot/craftbukkit.git) | Plugin support               | ✅      |
+| Spigot      | [Spigot](https://hub.spigotmc.org/stash/scm/spigot/spigot.git)      | Plugin support               | ✅      |
+| Paper       | [GitHub](https://github.com/PaperMC/Paper.git)                      | Plugin support               | 🔄     |
+| PurPur      | [GitHub](https://github.com/PurpurMC/Purpur.git)                    | Plugin support               | 🔄     |
+| Arclight    | [GitHub](https://github.com/IzzelAliz/Arclight.git)                 | Plugin Remapping and Message | ✅      |
 
 ## 💖 Special Thanks To:
 -------------
