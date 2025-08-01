@@ -13,6 +13,7 @@ import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.Nested;
 import org.gradle.api.tasks.OutputFile;
+import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.TaskAction;
 import org.jetbrains.annotations.Nullable;
 
@@ -45,6 +46,7 @@ public abstract class CreateInstallerProfile extends DefaultTask {
     @Input
     public abstract Property<String> getMcAndNeoFormVersion();
 
+    @Optional
     @InputFile
     public abstract RegularFileProperty getIcon();
 
@@ -81,8 +83,18 @@ public abstract class CreateInstallerProfile extends DefaultTask {
 
     @TaskAction
     public void createInstallerProfile() throws IOException {
-        var icon = "data:image/png;base64," + Base64.getEncoder().encodeToString(Files.readAllBytes(getIcon().getAsFile().get().toPath()));
-
+        String icon = "";
+        if (getIcon().isPresent()) {
+            try {
+                byte[] iconBytes = Files.readAllBytes(getIcon().getAsFile().get().toPath());
+                icon = "data:image/png;base64," + Base64.getEncoder().encodeToString(iconBytes);
+            } catch (Exception e) {
+                getLogger().warn("Failed to read icon file: {}", e.getMessage());
+            }
+        } else {
+            getLogger().warn("Icon not configured, using empty string. "
+                    + "To fix this, set the 'icon' property in your build script.");
+        }
         var data = new LinkedHashMap<String, LauncherDataEntry>();
         var neoFormVersion = getMcAndNeoFormVersion().get();
         data.put("MAPPINGS", new LauncherDataEntry(String.format("[net.neoforged:neoform:%s:mappings@txt]", neoFormVersion), String.format("[net.neoforged:neoform:%s:mappings@txt]", neoFormVersion)));

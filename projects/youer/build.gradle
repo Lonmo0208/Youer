@@ -131,7 +131,15 @@ dependencies {
     // (Only needed when compiling through IntelliJ non-delegated builds - otherwise `compileOnly` would work).
     implementation(jarJar(project(":neoforge-coremods")))
 
-    // craftbukkit
+    compileOnly 'com.mohistmc:youer:1.0'
+    implementation 'com.mohistmc:youer:1.0'
+    libraries 'com.mohistmc:youer:1.0'
+    compileOnly 'io:papermc:1.0'
+    implementation 'io:papermc:1.0'
+    libraries 'io:papermc:1.0'
+    compileOnly 'com.mojang:brigadier:Youer'
+    implementation 'com.mojang:brigadier:Youer'
+    libraries 'com.mojang:brigadier:Youer'
     libraries 'org.fusesource.jansi:jansi:2.4.1'
     libraries 'com.googlecode.json-simple:json-simple:1.1.1'
     libraries 'org.xerial:sqlite-jdbc:3.46.0.0'

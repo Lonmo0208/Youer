@@ -1,6 +1,5 @@
 package org.bukkit.craftbukkit;
 
-import ca.spottedleaf.concurrentutil.util.Priority;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableList;
