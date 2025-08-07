@@ -138,10 +138,12 @@
      private static final int NEUTRAL_MOB_DEATH_NOTIFICATION_RADII_XZ = 32;
      private static final int NEUTRAL_MOB_DEATH_NOTIFICATION_RADII_Y = 10;
      private static final int FLY_STAT_RECORDING_SPEED = 25;
-@@ -204,6 +_,7 @@
+@@ -203,7 +_,8 @@
+     private int levitationStartTime;
      private boolean disconnected;
      private int requestedViewDistance = 2;
-     public String language = "en_us";
+-    public String language = "en_us";
++    public String language = null; // CraftBukkit - default  // Paper - default to null
 +    public java.util.Locale adventure$locale = java.util.Locale.US; // Paper
      @Nullable
      private Vec3 startingToFallPosition;
@@ -414,7 +416,7 @@
          } catch (Throwable throwable) {
              CrashReport crashreport = CrashReport.forThrowable(throwable, "Ticking player");
              CrashReportCategory crashreportcategory = crashreport.addCategory("Player being ticked");
-@@ -657,9 +_,40 @@
+@@ -657,9 +_,42 @@
      @Override
      public void die(DamageSource p_9035_) {
          this.gameEvent(GameEvent.ENTITY_DIE);
@@ -437,11 +439,13 @@
 +                }
 +            }
 +        }
-+        // SPIGOT-5071: manually add player loot tables (SPIGOT-5195 - ignores keepInventory rule)
-+        this.dropFromLootTable(p_9035_, this.lastHurtByPlayerTime > 0);
-+        this.dropCustomDeathLoot(this.serverLevel(), p_9035_, flag);
-+        loot.addAll(this.drops);
-+        this.drops.clear(); // SPIGOT-5188: make sure to clear
++
++        if (this.shouldDropLoot() && this.level().getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT)) { // Paper - fix player loottables running when mob loot gamerule is false
++            // SPIGOT-5071: manually add player loot tables (SPIGOT-5195 - ignores keepInventory rule)
++            this.dropFromLootTable(p_9035_, this.lastHurtByPlayerTime > 0);
++            this.dropCustomDeathLoot(this.serverLevel(), p_9035_, flag);
++        } // Paper - fix player loottables running when mob loot gamerule is false
++
 +        Component defaultMessage = this.getCombatTracker().getDeathMessage();
 +        String deathmessage = defaultMessage.getString();
 +        keepLevel = keepInventory; // SPIGOT-2222: pre-set keepLevel
@@ -590,7 +594,7 @@
                  serverlevel1.getProfiler().push("moving");
                  if (resourcekey == Level.OVERWORLD && serverlevel.dimension() == Level.NETHER) {
                      this.enteredNetherPosition = this.position();
-@@ -895,10 +_,12 @@
+@@ -895,10 +_,14 @@
                  playerlist.sendLevelInfo(this, serverlevel);
                  playerlist.sendAllPlayerInfo(this);
                  playerlist.sendActivePlayerEffects(this);
@@ -599,6 +603,8 @@
                  this.lastSentExp = -1;
                  this.lastSentHealth = -1.0F;
                  this.lastSentFood = -1;
++                // Neo: On the client all attachments are lost on dimension change and need to be re-sent
++                net.neoforged.neoforge.attachment.AttachmentSync.syncInitialPlayerAttachments(this);
 +                EventHooks.firePlayerChangedDimensionEvent(this, resourcekey, p_350472_.newLevel().dimension());
                  return this;
              }
@@ -918,6 +924,15 @@
      }
  
      @Override
+@@ -1314,7 +_,7 @@
+     }
+ 
+     @Override
+-    protected void completeUsingItem() {
++    public void completeUsingItem() {
+         if (!this.useItem.isEmpty() && this.isUsingItem()) {
+             this.connection.send(new ClientboundEntityEventPacket(this, (byte)9));
+             super.completeUsingItem();
 @@ -1334,19 +_,20 @@
      }
  
@@ -1054,7 +1069,7 @@
 +            PlayerChangedMainHandEvent event = new PlayerChangedMainHandEvent(getBukkitEntity(), getMainArm() == HumanoidArm.LEFT ? MainHand.LEFT : MainHand.RIGHT);
 +            this.server.server.getPluginManager().callEvent(event);
 +        }
-+        if (!this.language.equals(p_301998_.language())) {
++        if (this.language == null || !this.language.equals(p_301998_.language())) { // Paper
 +            PlayerLocaleChangeEvent event = new PlayerLocaleChangeEvent(getBukkitEntity(), p_301998_.language());
 +            this.server.server.getPluginManager().callEvent(event);
 +        }

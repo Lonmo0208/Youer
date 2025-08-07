@@ -1,12 +1,13 @@
 package org.bukkit.craftbukkit.entity;
 
+import io.papermc.paper.loottable.PaperLootableEntityInventory;
 import net.minecraft.world.entity.vehicle.MinecartHopper;
 import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.craftbukkit.inventory.CraftInventory;
 import org.bukkit.entity.minecart.HopperMinecart;
 import org.bukkit.inventory.Inventory;
 
-public final class CraftMinecartHopper extends CraftMinecartContainer implements HopperMinecart {
+public final class CraftMinecartHopper extends CraftMinecartContainer implements HopperMinecart, PaperLootableEntityInventory {
     private final CraftInventory inventory;
 
     public CraftMinecartHopper(CraftServer server, MinecartHopper entity) {
@@ -33,4 +34,20 @@ public final class CraftMinecartHopper extends CraftMinecartContainer implements
     public void setEnabled(boolean enabled) {
         ((MinecartHopper) this.getHandle()).setEnabled(enabled);
     }
+    // Paper start
+    @Override
+    public net.minecraft.world.entity.vehicle.MinecartHopper getHandle() {
+        return (net.minecraft.world.entity.vehicle.MinecartHopper) super.getHandle();
+    }
+
+    @Override
+    public int getPickupCooldown() {
+        throw new UnsupportedOperationException("Hopper minecarts don't have cooldowns");
+    }
+
+    @Override
+    public void setPickupCooldown(int cooldown) {
+        throw new UnsupportedOperationException("Hopper minecarts don't have cooldowns");
+    }
+    // Paper end
 }

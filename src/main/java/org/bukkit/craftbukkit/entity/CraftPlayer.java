@@ -432,6 +432,97 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     }
 
     @Override
+    public void setPlayerListHeaderFooter(BaseComponent[] header, BaseComponent[] footer) {
+        if (header != null) {
+            String headerJson = net.md_5.bungee.chat.ComponentSerializer.toString(header);
+            playerListHeader = net.kyori.adventure.text.serializer.gson.GsonComponentSerializer.gson().deserialize(headerJson);
+        } else {
+            playerListHeader = null;
+        }
+
+        if (footer != null) {
+            String footerJson = net.md_5.bungee.chat.ComponentSerializer.toString(footer);
+            playerListFooter = net.kyori.adventure.text.serializer.gson.GsonComponentSerializer.gson().deserialize(footerJson);
+        } else {
+            playerListFooter = null;
+        }
+
+        updatePlayerListHeaderFooter();
+    }
+
+    @Override
+    public void setPlayerListHeaderFooter(BaseComponent header, BaseComponent footer) {
+        this.setPlayerListHeaderFooter(header == null ? null : new BaseComponent[]{header},
+                footer == null ? null : new BaseComponent[]{footer});
+    }
+
+
+    @Override
+    public void setTitleTimes(int fadeInTicks, int stayTicks, int fadeOutTicks) {
+        getHandle().connection.send(new ClientboundSetTitlesAnimationPacket(fadeInTicks, stayTicks, fadeOutTicks));
+    }
+
+    @Override
+    public void setSubtitle(BaseComponent[] subtitle) {
+        final ClientboundSetSubtitleTextPacket packet = new ClientboundSetSubtitleTextPacket(org.bukkit.craftbukkit.util.CraftChatMessage.fromJSON(net.md_5.bungee.chat.ComponentSerializer.toString(subtitle)));
+        getHandle().connection.send(packet);
+    }
+
+    @Override
+    public void setSubtitle(BaseComponent subtitle) {
+        setSubtitle(new BaseComponent[]{subtitle});
+    }
+
+    @Override
+    public void showTitle(BaseComponent[] title) {
+        final ClientboundSetTitleTextPacket packet = new ClientboundSetTitleTextPacket(org.bukkit.craftbukkit.util.CraftChatMessage.fromJSON(net.md_5.bungee.chat.ComponentSerializer.toString(title)));
+        getHandle().connection.send(packet);
+    }
+
+    @Override
+    public void showTitle(BaseComponent title) {
+        showTitle(new BaseComponent[]{title});
+    }
+
+    @Override
+    public void showTitle(BaseComponent[] title, BaseComponent[] subtitle, int fadeInTicks, int stayTicks, int fadeOutTicks) {
+        setTitleTimes(fadeInTicks, stayTicks, fadeOutTicks);
+        setSubtitle(subtitle);
+        showTitle(title);
+    }
+
+    @Override
+    public void showTitle(BaseComponent title, BaseComponent subtitle, int fadeInTicks, int stayTicks, int fadeOutTicks) {
+        setTitleTimes(fadeInTicks, stayTicks, fadeOutTicks);
+        setSubtitle(subtitle);
+        showTitle(title);
+    }
+
+    @Override
+    public void sendTitle(io.papermc.paper.Title title) {
+        Preconditions.checkNotNull(title, "Title is null");
+        setTitleTimes(title.getFadeIn(), title.getStay(), title.getFadeOut());
+        setSubtitle(title.getSubtitle() == null ? new BaseComponent[0] : title.getSubtitle());
+        showTitle(title.getTitle());
+    }
+
+    @Override
+    public void updateTitle(io.papermc.paper.Title title) {
+        Preconditions.checkNotNull(title, "Title is null");
+        setTitleTimes(title.getFadeIn(), title.getStay(), title.getFadeOut());
+        if (title.getSubtitle() != null) {
+            setSubtitle(title.getSubtitle());
+        }
+        showTitle(title.getTitle());
+    }
+
+    @Override
+    public void hideTitle() {
+        getHandle().connection.send(new ClientboundClearTitlesPacket(false));
+    }
+    // Paper end
+
+    @Override
     public String getDisplayName() {
         if(true) return io.papermc.paper.adventure.DisplayNames.getLegacy(this); // Paper
         return this.getHandle().displayName;
@@ -1107,6 +1198,11 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
 
     @Override
     public void sendHurtAnimation(float yaw) {
+        // Paper start - Add target entity to sendHurtAnimation
+        this.sendHurtAnimation(yaw, this);
+    }
+    public void sendHurtAnimation(float yaw, org.bukkit.entity.Entity target) {
+        // Paper end - Add target entity to sendHurtAnimation
         if (this.getHandle().connection == null) {
             return;
         }
@@ -1116,7 +1212,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
          * This makes no sense. We'll add 90 to it so that 0 = front, clockwise from there.
          */
         float actualYaw = yaw + 90;
-        this.getHandle().connection.send(new ClientboundHurtAnimationPacket(this.getEntityId(), actualYaw));
+        this.getHandle().connection.send(new ClientboundHurtAnimationPacket(target.getEntityId(), actualYaw)); // Paper - Add target entity to sendHurtAnimation
     }
 
     @Override
@@ -2516,6 +2612,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     }
 
     public void setRealHealth(double health) {
+        if (Double.isNaN(health)) {return;} // Paper - Check for NaN
         this.health = health;
     }
 
@@ -3101,6 +3198,12 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     }
     // Spigot end
 
+    // Paper start
+    @Override
+    public void showElderGuardian(boolean silent) {
+        if (getHandle().connection != null) getHandle().connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.GUARDIAN_ELDER_EFFECT, silent ? 0F : 1F));
+    }
+
     // Paper start - brand support
     @Override
     public String getClientBrandName() {
@@ -3153,4 +3256,14 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     public void setSendViewDistance(final int viewDistance) {
         throw new UnsupportedOperationException("Not implemented yet");
     }
+
+    // Paper start - entity effect API
+    @Override
+    public void sendEntityEffect(final org.bukkit.EntityEffect effect, final org.bukkit.entity.Entity target) {
+        if (this.getHandle().connection == null || !effect.isApplicableTo(target)) {
+            return;
+        }
+        this.getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundEntityEventPacket(((CraftEntity) target).getHandle(), effect.getData()));
+    }
+    // Paper end - entity effect API
 }

@@ -174,6 +174,13 @@ public class CraftChunk implements Chunk {
 
     @Override
     public BlockState[] getTileEntities() {
+        // Paper start
+        return getTileEntities(true);
+    }
+
+    @Override
+    public BlockState[] getTileEntities(boolean useSnapshot) {
+        // Paper end
         if (!this.isLoaded()) {
             this.getWorld().getChunkAt(this.x, this.z); // Transient load for this tick
         }
@@ -184,7 +191,28 @@ public class CraftChunk implements Chunk {
 
         for (BlockPos position : chunk.blockEntities.keySet()) {
             // Paper start
-            entities[index++] = this.worldServer.getWorld().getBlockAt(position.getX(), position.getY(), position.getZ()).getState();
+            entities[index++] = this.worldServer.getWorld().getBlockAt(position.getX(), position.getY(), position.getZ()).getState(useSnapshot);
+        }
+
+        return entities;
+    }
+
+    @Override
+    public Collection<BlockState> getTileEntities(Predicate<? super Block> blockPredicate, boolean useSnapshot) {
+        Preconditions.checkNotNull(blockPredicate, "blockPredicate");
+        if (!this.isLoaded()) {
+            this.getWorld().getChunkAt(this.x, this.z); // Transient load for this tick
+        }
+        ChunkAccess chunk = this.getHandle(ChunkStatus.FULL);
+
+        java.util.List<BlockState> entities = new java.util.ArrayList<>();
+
+        for (BlockPos position : chunk.blockEntities.keySet()) {
+            Block block = this.worldServer.getWorld().getBlockAt(position.getX(), position.getY(), position.getZ());
+            if (blockPredicate.test(block)) {
+                entities.add(block.getState(useSnapshot));
+            }
+            // Paper end
         }
 
         return entities;
@@ -300,12 +328,21 @@ public class CraftChunk implements Chunk {
 
     @Override
     public ChunkSnapshot getChunkSnapshot(boolean includeMaxBlockY, boolean includeBiome, boolean includeBiomeTempRain) {
+        // Paper start - Add getChunkSnapshot includeLightData parameter
+        return getChunkSnapshot(includeMaxBlockY, includeBiome, includeBiomeTempRain, true);
+    }
+
+    @Override
+    public ChunkSnapshot getChunkSnapshot(boolean includeMaxBlockY, boolean includeBiome, boolean includeBiomeTempRain, boolean includeLightData) {
+        // Paper end - Add getChunkSnapshot includeLightData parameter
         ChunkAccess chunk = this.getHandle(ChunkStatus.FULL);
 
         LevelChunkSection[] cs = chunk.getSections();
         PalettedContainer[] sectionBlockIDs = new PalettedContainer[cs.length];
-        byte[][] sectionSkyLights = new byte[cs.length][];
-        byte[][] sectionEmitLights = new byte[cs.length][];
+        // Paper start - Add getChunkSnapshot includeLightData parameter
+        byte[][] sectionSkyLights = includeLightData ? new byte[cs.length][] : null;
+        byte[][] sectionEmitLights = includeLightData ? new byte[cs.length][] : null;
+        // Paper end - Add getChunkSnapshot includeLightData parameter
         boolean[] sectionEmpty = new boolean[cs.length];
         PalettedContainerRO<Holder<net.minecraft.world.level.biome.Biome>>[] biome = (includeBiome || includeBiomeTempRain) ? new PalettedContainer[cs.length] : null;
 
@@ -319,21 +356,23 @@ public class CraftChunk implements Chunk {
             sectionBlockIDs[i] = ChunkSerializer.BLOCK_STATE_CODEC.parse(NbtOps.INSTANCE, data.getCompound("block_states")).getOrThrow(ChunkSerializer.ChunkReadException::new);
             sectionEmpty[i] = cs[i].hasOnlyAir();
 
-            LevelLightEngine lightengine = this.worldServer.getLightEngine();
-            DataLayer skyLightArray = lightengine.getLayerListener(LightLayer.SKY).getDataLayerData(SectionPos.of(this.x, chunk.getSectionYFromSectionIndex(i), this.z)); // SPIGOT-7498: Convert section index
-            if (skyLightArray == null) {
-                sectionSkyLights[i] = this.worldServer.dimensionType().hasSkyLight() ? CraftChunk.FULL_LIGHT : CraftChunk.EMPTY_LIGHT;
-            } else {
-                sectionSkyLights[i] = new byte[2048];
-                System.arraycopy(skyLightArray.getData(), 0, sectionSkyLights[i], 0, 2048);
-            }
-            DataLayer emitLightArray = lightengine.getLayerListener(LightLayer.BLOCK).getDataLayerData(SectionPos.of(this.x, chunk.getSectionYFromSectionIndex(i), this.z)); // SPIGOT-7498: Convert section index
-            if (emitLightArray == null) {
-                sectionEmitLights[i] = CraftChunk.EMPTY_LIGHT;
-            } else {
-                sectionEmitLights[i] = new byte[2048];
-                System.arraycopy(emitLightArray.getData(), 0, sectionEmitLights[i], 0, 2048);
-            }
+            if (includeLightData) { // Paper - Add getChunkSnapshot includeLightData parameter
+                LevelLightEngine lightengine = this.worldServer.getLightEngine();
+                DataLayer skyLightArray = lightengine.getLayerListener(LightLayer.SKY).getDataLayerData(SectionPos.of(this.x, chunk.getSectionYFromSectionIndex(i), this.z)); // SPIGOT-7498: Convert section index
+                if (skyLightArray == null) {
+                    sectionSkyLights[i] = this.worldServer.dimensionType().hasSkyLight() ? CraftChunk.FULL_LIGHT : CraftChunk.EMPTY_LIGHT;
+                } else {
+                    sectionSkyLights[i] = new byte[2048];
+                    System.arraycopy(skyLightArray.getData(), 0, sectionSkyLights[i], 0, 2048);
+                }
+                DataLayer emitLightArray = lightengine.getLayerListener(LightLayer.BLOCK).getDataLayerData(SectionPos.of(this.x, chunk.getSectionYFromSectionIndex(i), this.z)); // SPIGOT-7498: Convert section index
+                if (emitLightArray == null) {
+                    sectionEmitLights[i] = CraftChunk.EMPTY_LIGHT;
+                } else {
+                    sectionEmitLights[i] = new byte[2048];
+                    System.arraycopy(emitLightArray.getData(), 0, sectionEmitLights[i], 0, 2048);
+                }
+            } // Paper - Add getChunkSnapshot includeLightData parameter
 
             if (biome != null) {
                 data.put("biomes", biomeCodec.encodeStart(NbtOps.INSTANCE, cs[i].getBiomes()).getOrThrow());

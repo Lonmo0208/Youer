@@ -315,6 +315,7 @@ public final class CraftServer implements Server {
     public int reloadCount;
     public Set<String> activeCompatibilities = Collections.emptySet();
     private final io.papermc.paper.datapack.PaperDatapackManager datapackManager; // Paper
+    private final io.papermc.paper.potion.PaperPotionBrewer potionBrewer; // Paper - Custom Potion Mixes
 
     // Paper start - Folia region threading API
     private final io.papermc.paper.threadedregions.scheduler.FallbackRegionScheduler regionizedScheduler = new io.papermc.paper.threadedregions.scheduler.FallbackRegionScheduler();
@@ -471,6 +472,7 @@ public final class CraftServer implements Server {
         if (this.configuration.getBoolean("settings.use-map-color-cache")) {
             MapPalette.setMapColorCache(new CraftMapColorCache(this.logger));
         }
+        this.potionBrewer = new io.papermc.paper.potion.PaperPotionBrewer(console); // Paper - custom potion mixes
         datapackManager = new io.papermc.paper.datapack.PaperDatapackManager(console.getPackRepository()); // Paper
     }
 
@@ -616,6 +618,7 @@ public final class CraftServer implements Server {
         if (type == PluginLoadOrder.STARTUP) {
             this.helpMap.clear();
             this.helpMap.initializeGeneralTopics();
+            if (io.papermc.paper.configuration.GlobalConfiguration.get().misc.loadPermissionsYmlBeforePlugins) loadCustomPermissions(); // Paper
         }
 
         Plugin[] plugins = this.pluginManager.getPlugins();
@@ -635,7 +638,7 @@ public final class CraftServer implements Server {
             this.commandMap.registerServerAliases();
             DefaultPermissions.registerCorePermissions();
             CraftDefaultPermissions.registerCorePermissions();
-            this.loadCustomPermissions();
+            if (!io.papermc.paper.configuration.GlobalConfiguration.get().misc.loadPermissionsYmlBeforePlugins) this.loadCustomPermissions(); // Paper
             this.helpMap.initializeCommands();
             this.syncCommands();
         }
@@ -1994,7 +1997,7 @@ public final class CraftServer implements Server {
         if (result == null) {
             GameProfile profile = null;
             // Only fetch an online UUID in online mode
-            if (this.getOnlineMode() || org.spigotmc.SpigotConfig.bungee) { // Spigot: bungee = online mode, for now.
+            if (this.getOnlineMode() || io.papermc.paper.configuration.GlobalConfiguration.get().proxies.isProxyOnlineMode()) { // Paper - Add setting for proxy online mode status
                 // This is potentially blocking :(
                 profile = this.console.getProfileCache().get(name).orElse(null);
             }
@@ -2106,6 +2109,22 @@ public final class CraftServer implements Server {
             case PROFILE, NAME -> (T) new CraftProfileBanList(this.playerList.getBans());
         };
     }
+
+    // Paper start - add BanListType (which has a generic)
+    @SuppressWarnings("unchecked")
+    @Override
+    public <B extends BanList<E>, E> B getBanList(final io.papermc.paper.ban.BanListType<B> type) {
+        Preconditions.checkArgument(type != null, "BanList.BanType cannot be null");
+        if (type == io.papermc.paper.ban.BanListType.IP) {
+            return (B) new CraftIpBanList(this.playerList.getIpBans());
+        } else if (type == io.papermc.paper.ban.BanListType.PROFILE) {
+            return (B) new CraftProfileBanList(this.playerList.getBans());
+        } else {
+            throw new IllegalArgumentException("Unknown BanListType: " + type);
+        }
+    }
+    // Paper end - add BanListType (which has a generic)
+
 
     @Override
     public void setWhitelist(boolean value) {
@@ -2335,6 +2354,11 @@ public final class CraftServer implements Server {
         }
         commandMap.registerServerAliases();
         return true;
+    }
+
+    @Override
+    public boolean suggestPlayerNamesWhenNullTabCompletions() {
+        return io.papermc.paper.configuration.GlobalConfiguration.get().commands.suggestPlayerNamesWhenNullTabCompletions;
     }
 
     @Override
@@ -2954,8 +2978,19 @@ public final class CraftServer implements Server {
         return net.minecraft.server.MinecraftServer.getServer().hasStopped();
     }
 
+    private io.papermc.paper.entity.ai.MobGoals mobGoals = new io.papermc.paper.entity.ai.PaperMobGoals();
+    @Override
+    public io.papermc.paper.entity.ai.MobGoals getMobGoals() {
+        return mobGoals;
+    }
+
     @Override
     public io.papermc.paper.datapack.PaperDatapackManager getDatapackManager() {
         return datapackManager;
+    }
+
+    @Override
+    public io.papermc.paper.potion.PaperPotionBrewer getPotionBrewer() {
+        return this.potionBrewer;
     }
 }

@@ -89,4 +89,39 @@ public interface Item extends Entity {
      */
     @Nullable
     public UUID getThrower();
+
+    // Paper start
+    /**
+     * Gets if non-player entities can pick this Item up
+     *
+     * @return True if non-player entities can pickup
+     */
+    public boolean canMobPickup();
+
+    /**
+     * Sets if non-player entities can pick this Item up
+     *
+     * @param canMobPickup True to allow non-player entity pickup
+     */
+    public void setCanMobPickup(boolean canMobPickup);
+
+    /**
+     * Gets the health of item stack.
+     * <p>
+     * Currently the default max health is 5.
+     *
+     * @return the health
+     */
+    public int getHealth();
+
+    /**
+     * Sets the health of the item stack. If the value is non-positive
+     * the itemstack's normal "on destroy" functionality will be run.
+     * <p>
+     * Currently, the default max health is 5.
+     *
+     * @param health the health, a non-positive value will destroy the entity
+     */
+    public void setHealth(int health);
+    // Paper end
 }

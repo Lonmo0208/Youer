@@ -1,6 +1,6 @@
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
-@@ -1,7 +_,13 @@
+@@ -1,10 +_,18 @@
  package net.minecraft.server.level;
  
 +import com.mohistmc.youer.YouerConfig;
@@ -14,6 +14,11 @@
  import com.mojang.datafixers.DataFixer;
  import com.mojang.datafixers.util.Pair;
  import com.mojang.logging.LogUtils;
++import io.papermc.paper.event.entity.EntityAddToWorldEvent;
++import io.papermc.paper.event.entity.EntityRemoveFromWorldEvent;
+ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+ import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+ import it.unimi.dsi.fastutil.longs.LongSet;
 @@ -14,6 +_,7 @@
  import it.unimi.dsi.fastutil.objects.ObjectLinkedOpenHashSet;
  import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
@@ -139,7 +144,7 @@
      private final MinecraftServer server;
      public final ServerLevelData serverLevelData;
      private int lastSpawnChunkRadius;
-@@ -199,12 +_,36 @@
+@@ -199,12 +_,37 @@
      private final List<CustomSpawner> customSpawners;
      @Nullable
      private EndDragonFight dragonFight;
@@ -155,6 +160,7 @@
 +    public final UUID uuid;
 +    public ResourceKey<LevelStem> typeKey;
 +    public boolean hasEntityMoveEvent; // Paper - Add EntityMoveEvent
++    public boolean hasPhysicsEvent = true; // Paper - BlockPhysicsEvent
 +
 +    @Override
 +    public ResourceKey<LevelStem> getTypeKey() {
@@ -695,7 +701,7 @@
          p_8713_.clearAllBlockEntities();
          p_8713_.unregisterTickContainerFromLevel(this);
      }
-@@ -933,13 +_,42 @@
+@@ -933,13 +_,53 @@
          p_143262_.remove(p_143263_);
      }
  
@@ -722,6 +728,17 @@
 +        Entity entity = this.getEntity(p_8612_);
 +        if (entity instanceof Player) entityhuman = (Player) entity;
 +        // CraftBukkit end
++
++        // Paper start - Add BlockBreakProgressUpdateEvent
++        // If a plugin is using this method to send destroy packets for a client-side only entity id, no block progress occurred on the server.
++        // Hence, do not call the event.
++        if (entity != null) {
++            float progressFloat = Mth.clamp(p_8614_, 0, 10) / 10.0f;
++            org.bukkit.craftbukkit.block.CraftBlock bukkitBlock = org.bukkit.craftbukkit.block.CraftBlock.at(this, p_8613_);
++            new io.papermc.paper.event.block.BlockBreakProgressUpdateEvent(bukkitBlock, progressFloat, entity.getBukkitEntity())
++                    .callEvent();
++        }
++        // Paper end - Add BlockBreakProgressUpdateEvent
 +
          for (ServerPlayer serverplayer : this.server.getPlayerList().getPlayers()) {
              if (serverplayer != null && serverplayer.level() == this && serverplayer.getId() != p_8612_) {
@@ -896,7 +913,7 @@
      }
  
      @Nullable
-@@ -1713,16 +_,57 @@
+@@ -1713,16 +_,58 @@
                  ServerLevel.this.navigatingMobs.add(mob);
              }
  
@@ -920,6 +937,7 @@
 +                p_143371_.setOrigin(p_143371_.getOriginVector().toLocation(getWorld()));
 +            }
 +            // Paper end - Entity origin API
++            new EntityAddToWorldEvent(p_143371_.getBukkitEntity(), ServerLevel.this.getWorld()).callEvent(); // Paper - fire while valid
          }
  
          public void onTrackingEnd(Entity p_143375_) {
@@ -956,7 +974,7 @@
              ServerLevel.this.getChunkSource().removeEntity(p_143375_);
              if (p_143375_ instanceof ServerPlayer serverplayer) {
                  ServerLevel.this.players.remove(serverplayer);
-@@ -1733,24 +_,115 @@
+@@ -1733,24 +_,121 @@
                  if (ServerLevel.this.isUpdatingNavigations) {
                      String s = "onTrackingStart called during navigation iteration";
                      Util.logAndPauseIfInIde(
@@ -989,6 +1007,7 @@
 +
 +            p_143375_.onRemovedFromLevel();
 +            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(new net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent(p_143375_, ServerLevel.this));
++            new EntityRemoveFromWorldEvent(p_143375_.getBukkitEntity(), ServerLevel.this.getWorld()).callEvent(); // Paper - fire while valid
          }
  
          public void onSectionChange(Entity p_215086_) {
@@ -999,6 +1018,11 @@
 +    @Override
 +    public java.util.Collection<net.neoforged.neoforge.entity.PartEntity<?>> getPartEntities() {
 +        return this.dragonParts.values();
++    }
++
++    @Override
++    public final void syncData(net.neoforged.neoforge.attachment.AttachmentType<?> type) {
++        net.neoforged.neoforge.attachment.AttachmentSync.syncLevelUpdate(this, type);
 +    }
 +
 +    private final net.neoforged.neoforge.capabilities.CapabilityListenerHolder capListenerHolder = new net.neoforged.neoforge.capabilities.CapabilityListenerHolder();

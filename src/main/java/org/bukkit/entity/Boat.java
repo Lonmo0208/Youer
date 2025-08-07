@@ -7,7 +7,7 @@ import org.jetbrains.annotations.NotNull;
 /**
  * Represents a boat entity.
  */
-public interface Boat extends Vehicle {
+public interface Boat extends Vehicle, io.papermc.paper.entity.Leashable { // Paper - Leashable API
 
     /**
      * Gets the wood type of the boat.
@@ -169,6 +169,7 @@ public interface Boat extends Vehicle {
      */
     public enum Status {
 
+        NOT_IN_WORLD, // Paper
         IN_WATER,
         UNDER_WATER,
         UNDER_FLOWING_WATER,

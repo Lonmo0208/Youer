@@ -221,4 +221,27 @@ public class CraftArmorStand extends CraftLivingEntity implements ArmorStand {
     public boolean hasEquipmentLock(EquipmentSlot equipmentSlot, LockType lockType) {
         return (this.getHandle().disabledSlots & (1 << CraftEquipmentSlot.getNMS(equipmentSlot).getFilterFlag() + lockType.ordinal() * 8)) != 0;
     }
+
+    // Paper start
+    @Override
+    public boolean canMove() {
+        return getHandle().canMove;
+    }
+
+    @Override
+    public void setCanMove(boolean move) {
+        getHandle().canMove = move;
+    }
+
+    @Override
+    public boolean canTick() {
+        return this.getHandle().canTick;
+    }
+
+    @Override
+    public void setCanTick(final boolean tick) {
+        this.getHandle().canTick = tick;
+        this.getHandle().canTickSetByAPI = true;
+    }
+    // Paper end
 }

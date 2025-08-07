@@ -370,10 +370,12 @@
      protected abstract void defineSynchedData(SynchedEntityData.Builder p_326003_);
  
      public SynchedEntityData getEntityData() {
-@@ -380,6 +_,32 @@
+@@ -379,7 +_,33 @@
+         return Mth.lengthSquared(d0, d2) < Mth.square(p_216994_) && Mth.square(d1) < Mth.square(p_216995_);
      }
  
-     protected void setRot(float p_19916_, float p_19917_) {
+-    protected void setRot(float p_19916_, float p_19917_) {
++    public void setRot(float p_19916_, float p_19917_) {
 +        // CraftBukkit start - yaw was sometimes set to NaN, so we need to set it back to 0
 +        if (Float.isNaN(p_19916_)) {
 +            p_19916_ = 0;
@@ -432,6 +434,15 @@
          if (this.canSpawnSprintParticle()) {
              this.spawnSprintParticle();
          }
+@@ -459,7 +_,7 @@
+                 this.setRemainingFireTicks(this.remainingFireTicks - 1);
+             }
+ 
+-            if (this.getTicksFrozen() > 0) {
++            if (this.getTicksFrozen() > 0 && !freezeLocked) { // Paper - Freeze Tick Lock API
+                 this.setTicksFrozen(0);
+                 this.level().levelEvent(null, 1009, this.blockPosition, 1);
+             }
 @@ -467,7 +_,11 @@
  
          if (this.isInLava()) {
@@ -610,6 +621,22 @@
 -        SoundType soundtype = p_20136_.getSoundType();
 +        SoundType soundtype = p_20136_.getSoundType(this.level, p_20135_, this);
          this.playSound(soundtype.getStepSound(), soundtype.getVolume() * 0.15F, soundtype.getPitch());
+     }
+ 
+@@ -1209,13 +_,13 @@
+         return this.wasTouchingWater;
+     }
+ 
+-    private boolean isInRain() {
++    public boolean isInRain() {
+         BlockPos blockpos = this.blockPosition();
+         return this.level().isRainingAt(blockpos)
+             || this.level().isRainingAt(BlockPos.containing((double)blockpos.getX(), this.getBoundingBox().maxY, (double)blockpos.getZ()));
+     }
+ 
+-    private boolean isInBubbleColumn() {
++    public boolean isInBubbleColumn() {
+         return this.getInBlockState().is(Blocks.BUBBLE_COLUMN);
      }
  
 @@ -1241,20 +_,23 @@
@@ -866,7 +893,7 @@
              this.addAdditionalSaveData(p_20241_);
              if (this.isVehicle()) {
                  ListTag listtag1 = new ListTag();
-@@ -1720,6 +_,24 @@
+@@ -1720,6 +_,27 @@
                  }
              }
  
@@ -887,7 +914,10 @@
 +            if (spawnReason != null) {
 +                p_20241_.putString("Paper.SpawnReason", spawnReason.name());
 +            }
-+
++            if (freezeLocked) {
++                p_20241_.putBoolean("Paper.FreezeLock", true);
++            }
++            // Paper end
              return p_20241_;
          } catch (Throwable throwable) {
              CrashReport crashreport = CrashReport.forThrowable(throwable, "Saving entity NBT");
@@ -900,7 +930,7 @@
                  if (p_20259_.contains("Tags", 9)) {
                      this.tags.clear();
                      ListTag listtag3 = p_20259_.getList("Tags", 8);
-@@ -1801,6 +_,80 @@
+@@ -1801,6 +_,84 @@
              } else {
                  throw new IllegalStateException("Entity has invalid rotation");
              }
@@ -977,6 +1007,10 @@
 +            if (spawnReason == null) {
 +                spawnReason = org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.DEFAULT;
 +            }
++            if (p_20259_.contains("Paper.FreezeLock")) {
++                freezeLocked = p_20259_.getBoolean("Paper.FreezeLock");
++            }
++            // Paper end
 +
          } catch (Throwable throwable) {
              CrashReport crashreport = CrashReport.forThrowable(throwable, "Loading entity NBT");
@@ -1228,7 +1262,7 @@
 +            return;
 +        }
 +
-+        if (!this.hurt(this.damageSources().lightningBolt().customEntityDamager(p_19928_), 5.0F)) {
++        if (!this.hurt(this.damageSources().lightningBolt().customEventDamager(p_19928_), 5.0F)) { // Paper - fix DamageSource API
 +            return;
 +        }
 +        // CraftBukkit end
@@ -1353,6 +1387,21 @@
      }
  
      public final float getEyeHeight(Pose p_20237_) {
+@@ -2896,8 +_,14 @@
+     public void startSeenByPlayer(ServerPlayer p_20119_) {
+     }
+ 
++    // Paper start - entity tracking events
+     public void stopSeenByPlayer(ServerPlayer p_20174_) {
++        // Since this event cannot be cancelled, we should call it here to catch all "un-tracks"
++        if (io.papermc.paper.event.player.PlayerUntrackEntityEvent.getHandlerList().getRegisteredListeners().length > 0) {
++            new io.papermc.paper.event.player.PlayerUntrackEntityEvent(p_20174_.getBukkitEntity(), this.getBukkitEntity()).callEvent();
++        }
+     }
++    // Paper end - entity tracking events
+ 
+     public float rotate(Rotation p_20004_) {
+         float f = Mth.wrapDegrees(this.getYRot());
 @@ -3110,9 +_,17 @@
          return Mth.lerp(p_352259_, this.yRotO, this.yRot);
      }
@@ -1536,7 +1585,7 @@
      @Override
      public void setLevelCallback(EntityInLevelCallback p_146849_) {
          this.levelCallback = p_146849_;
-@@ -3451,6 +_,128 @@
+@@ -3451,11 +_,138 @@
          return true;
      }
  
@@ -1651,6 +1700,11 @@
 +        return super.setData(type, data);
 +    }
 +
++    @Override
++    public final void syncData(net.neoforged.neoforge.attachment.AttachmentType<?> type) {
++        net.neoforged.neoforge.attachment.AttachmentSync.syncEntityUpdate(this, type);
++    }
++
 +    // Neo: Hookup Capabilities getters to entities
 +    @Nullable
 +    public final <T, C extends @org.jetbrains.annotations.Nullable Object> T getCapability(net.neoforged.neoforge.capabilities.EntityCapability<T, C> capability, C context) {
@@ -1665,6 +1719,12 @@
      public Level level() {
          return this.level;
      }
+ 
+-    protected void setLevel(Level p_285201_) {
++    public void setLevel(Level p_285201_) {
+         this.level = p_285201_;
+     }
+ 
 @@ -3550,4 +_,14 @@
              return this.save;
          }

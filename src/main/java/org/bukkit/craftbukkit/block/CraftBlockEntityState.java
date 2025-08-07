@@ -20,7 +20,7 @@ import org.bukkit.persistence.PersistentDataContainer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public class CraftBlockEntityState<T extends BlockEntity> extends CraftBlockState implements TileState {
+public abstract class CraftBlockEntityState<T extends BlockEntity> extends CraftBlockState implements TileState { // Paper - revert upstream's revert of the block state changes
 
     private final T tileEntity;
     private final T snapshot;
@@ -32,18 +32,27 @@ public class CraftBlockEntityState<T extends BlockEntity> extends CraftBlockStat
 
         this.tileEntity = tileEntity;
 
-        // Paper start
-        this.snapshotDisabled = DISABLE_SNAPSHOT;
-        if (DISABLE_SNAPSHOT) {
-            this.snapshot = this.tileEntity;
-        } else {
-            this.snapshot = this.createSnapshot(tileEntity);
+        try { // Paper - Show blockstate location if we failed to read it
+            // Paper start
+            this.snapshotDisabled = DISABLE_SNAPSHOT;
+            if (DISABLE_SNAPSHOT) {
+                this.snapshot = this.tileEntity;
+            } else {
+                this.snapshot = this.createSnapshot(tileEntity);
+            }
+            // copy tile entity data:
+            if (this.snapshot != null) {
+                this.load(this.snapshot);
+            }
+            // Paper end
+            // Paper start - Show blockstate location if we failed to read it
+        } catch (Throwable thr) {
+            if (thr instanceof ThreadDeath) {
+                throw (ThreadDeath) thr;
+            }
+            throw new RuntimeException("Failed to read BlockState at: world: " + this.getWorld().getName() + " location: (" + this.getX() + ", " + this.getY() + ", " + this.getZ() + ")", thr);
         }
-        // copy tile entity data:
-        if (this.snapshot != null) {
-            this.load(this.snapshot);
-        }
-        // Paper end
+        // Paper end - Show blockstate location if we failed to read it
     }
 
     protected CraftBlockEntityState(CraftBlockEntityState<T> state, Location location) {
@@ -142,6 +151,19 @@ public class CraftBlockEntityState<T extends BlockEntity> extends CraftBlockStat
         return snapshot.getUpdateTag(getRegistryAccess());
     }
 
+    // Paper start - properly save blockentity itemstacks
+    public CompoundTag getSnapshotCustomNbtOnly() {
+        this.applyTo(this.snapshot);
+        final CompoundTag nbt = this.snapshot.saveCustomOnly(this.getRegistryAccess());
+        this.snapshot.removeComponentsFromTag(nbt);
+        if (!nbt.isEmpty()) {
+            // have to include the "id" if it's going to have block entity data
+            this.snapshot.saveId(nbt);
+        }
+        return nbt;
+    }
+    // Paper end
+
     // copies the data of the given tile entity to this block state
     protected void load(T tileEntity) {
         if (tileEntity != null && tileEntity != this.snapshot) {
@@ -187,14 +209,10 @@ public class CraftBlockEntityState<T extends BlockEntity> extends CraftBlockStat
     }
 
     @Override
-    public CraftBlockEntityState<T> copy() {
-        return new CraftBlockEntityState<>(this, null);
-    }
+    public abstract CraftBlockEntityState<T> copy(); // Paper - make abstract
 
     @Override
-    public CraftBlockEntityState<T> copy(Location location) {
-        return new CraftBlockEntityState<>(this, location);
-    }
+    public abstract CraftBlockEntityState<T> copy(Location location); // Paper - make abstract
 
     // Paper start
     @Override

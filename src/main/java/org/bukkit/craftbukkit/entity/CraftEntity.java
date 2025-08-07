@@ -328,6 +328,18 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         return this.getHandle().isFullyFrozen();
     }
 
+    // Paper start - Freeze Tick Lock API
+    @Override
+    public boolean isFreezeTickingLocked() {
+        return this.entity.freezeLocked;
+    }
+
+    @Override
+    public void lockFreezeTicks(boolean locked) {
+        this.entity.freezeLocked = locked;
+    }
+    // Paper end - Freeze Tick Lock API
+
     @Override
     public void remove() {
         this.entity.pluginRemoved = true;
@@ -839,6 +851,18 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         return Pose.values()[this.getHandle().getPose().ordinal()];
     }
 
+    // Paper start
+    @Override
+    public void setSneaking(boolean sneak) {
+        this.getHandle().setShiftKeyDown(sneak);
+    }
+
+    @Override
+    public boolean isSneaking() {
+        return this.getHandle().isShiftKeyDown();
+    }
+    // Paper end
+
     @Override
     public SpawnCategory getSpawnCategory() {
         return CraftSpawnCategory.toBukkit(this.getHandle().getType().getCategory());
@@ -1062,4 +1086,118 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         return originVector.toLocation(world);
     }
     // Paper end - entity origin API
+
+    // Paper start - raw entity serialization API
+    @Override
+    public boolean spawnAt(Location location, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason reason) {
+        Preconditions.checkNotNull(location, "location cannot be null");
+        Preconditions.checkNotNull(reason, "reason cannot be null");
+        this.entity.setLevel(((CraftWorld) location.getWorld()).getHandle());
+        this.entity.setPos(location.getX(), location.getY(), location.getZ());
+        this.entity.setRot(location.getYaw(), location.getPitch());
+        return !this.entity.valid && this.entity.level().addFreshEntity(this.entity, reason);
+    }
+    // Paper end - raw entity serialization API
+
+    // Paper start - entity liquid API
+    @Override
+    public boolean isUnderWater() {
+        return getHandle().isUnderWater();
+    }
+
+    @Override
+    public boolean isInRain() {
+        return getHandle().isInRain();
+    }
+
+    @Override
+    public boolean isInBubbleColumn() {
+        return getHandle().isInBubbleColumn();
+    }
+
+    @Override
+    public boolean isInWaterOrRain() {
+        return getHandle().isInWaterOrRain();
+    }
+
+    @Override
+    public boolean isInWaterOrBubbleColumn() {
+        return getHandle().isInWaterOrBubble();
+    }
+
+    @Override
+    public boolean isInWaterOrRainOrBubbleColumn() {
+        return getHandle().isInWaterRainOrBubble();
+    }
+
+    @Override
+    public boolean isInLava() {
+        return getHandle().isInLava();
+    }
+    // Paper end - entity liquid API
+
+    // Paper start - isTicking API
+    @Override
+    public boolean isTicking() {
+        return getHandle().isTicking();
+    }
+    // Paper end - isTicking API
+
+    // Paper start - tracked players API
+    @Override
+    public Set<org.bukkit.entity.Player> getTrackedPlayers() {
+        ServerLevel world = (net.minecraft.server.level.ServerLevel)this.entity.level();
+        ChunkMap.TrackedEntity tracker = world == null ? null : world.getChunkSource().chunkMap.entityMap.get(this.entity.getId());
+        if (tracker == null) {
+            return java.util.Collections.emptySet();
+        }
+
+        Set<org.bukkit.entity.Player> set = new java.util.HashSet<>(tracker.seenBy.size());
+        for (net.minecraft.server.network.ServerPlayerConnection connection : tracker.seenBy) {
+            set.add(connection.getPlayer().getBukkitEntity().getPlayer());
+        }
+        return set;
+    }
+    // Paper end - tracked players API
+
+    // Paper start - broadcast hurt animation
+    @Override
+    public void broadcastHurtAnimation(java.util.Collection<Player> players) {
+        //noinspection SuspiciousMethodCalls
+        Preconditions.checkArgument(!players.contains(this), "Cannot broadcast hurt animation to self without a yaw");
+        for (final org.bukkit.entity.Player player : players) {
+            ((CraftPlayer) player).sendHurtAnimation(0, this);
+        }
+    }
+    // Paper end - broadcast hurt animation
+
+    // Paper start - missing entity api
+    @Override
+    public boolean isInvisible() {  // Paper - moved up from LivingEntity
+        return this.getHandle().isInvisible();
+    }
+
+    @Override
+    public void setInvisible(boolean invisible) {  // Paper - moved up from LivingEntity
+        this.getHandle().persistentInvisibility = invisible;
+        this.getHandle().setSharedFlag(Entity.FLAG_INVISIBLE, invisible);
+    }
+
+    @Override
+    public void setNoPhysics(boolean noPhysics) {
+        this.getHandle().noPhysics = noPhysics;
+    }
+
+    @Override
+    public boolean hasNoPhysics() {
+        return this.getHandle().noPhysics;
+    }
+    // Paper end - missing entity api
+
+    // Paper start - entity scoreboard name
+    @Override
+    public String getScoreboardEntryName() {
+        return this.getHandle().getScoreboardName();
+    }
+    // Paper end - entity scoreboard name
 }

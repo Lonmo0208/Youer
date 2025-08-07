@@ -200,6 +200,19 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
     @NotNull
     public Chunk getChunkAt(@NotNull Block block);
 
+    // Paper start - isChunkGenerated API
+    /**
+     * Checks if a {@link Chunk} has been generated at the specified chunk key,
+     * which is the X and Z packed into a long.
+     *
+     * @param chunkKey The Chunk Key to look up the chunk by
+     * @return true if the chunk has been generated, otherwise false
+     */
+    default boolean isChunkGenerated(long chunkKey) {
+        return isChunkGenerated((int) chunkKey, (int) (chunkKey >> 32));
+    }
+    // Paper end - isChunkGenerated API
+
     /**
      * Checks if the specified {@link Chunk} is loaded
      *
@@ -344,8 +357,8 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
      * @return Whether the chunk was actually regenerated
      *
      * @deprecated regenerating a single chunk is not likely to produce the same
-     * chunk as before as terrain decoration may be spread across chunks. Use of
-     * this method should be avoided as it is known to produce buggy results.
+     * chunk as before as terrain decoration may be spread across chunks. It may
+     * or may not change blocks in the adjacent chunks as well.
      */
     @Deprecated
     public boolean regenerateChunk(int x, int z);
@@ -949,6 +962,18 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
      */
     @NotNull
     public Collection<Entity> getNearbyEntities(@NotNull Location location, double x, double y, double z);
+
+    // Paper start - getEntity by UUID API
+    /**
+     * Gets an entity in this world by its UUID
+     *
+     * @param uuid the UUID of the entity
+     * @return the entity with the given UUID, or null if it isn't found
+     */
+    @Nullable
+    public Entity getEntity(@NotNull java.util.UUID uuid);
+    // Paper end
+
 
     /**
      * Returns a list of entities within a bounding box centered around a
@@ -3264,6 +3289,17 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
      */
     @Nullable
     public Raid locateNearestRaid(@NotNull Location location, int radius);
+
+    // Paper start - more Raid API
+    /**
+     * Get a raid with the specific id from {@link Raid#getId}
+     * from this world.
+     *
+     * @param id the id of the raid
+     * @return the raid or null if none with that id
+     */
+    @Nullable Raid getRaid(int id);
+    // Paper end - more Raid API
 
     /**
      * Gets all raids that are going on over this world.

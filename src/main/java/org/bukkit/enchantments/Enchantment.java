@@ -14,7 +14,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * The various type of enchantments that may be added to armour or weapons
  */
-public abstract class Enchantment implements Keyed, Translatable {
+public abstract class Enchantment implements Keyed, Translatable, net.kyori.adventure.translation.Translatable { // Paper - Adventure translations
     /**
      * Provides protection against environmental damage
      */
@@ -324,6 +324,16 @@ public abstract class Enchantment implements Keyed, Translatable {
     public abstract net.kyori.adventure.text.@NotNull Component displayName(int level);
     // Paper end
 
+    // Paper start - mark translation key as deprecated
+    /**
+     * @deprecated this method assumes that the enchantments description
+     * always be a translatable component which is not guaranteed.
+     */
+    @Override
+    @Deprecated(forRemoval = true)
+    public abstract @NotNull String translationKey();
+    // Paper end - mark translation key as deprecated
+
     /**
      * Gets the Enchantment at the specified key
      *
@@ -370,4 +380,54 @@ public abstract class Enchantment implements Keyed, Translatable {
     public static Enchantment[] values() {
         return Lists.newArrayList(Registry.ENCHANTMENT).toArray(new Enchantment[0]);
     }
+
+    // Paper start - even more Enchantment API
+    /**
+     * Provides the description of this enchantment entry as displayed to the client, e.g. "Sharpness" for the sharpness
+     * enchantment.
+     *
+     * @return the description component.
+     */
+    public abstract net.kyori.adventure.text.@NotNull Component description();
+
+    /**
+     * Provides the registry key set referencing the items this enchantment is supported on.
+     *
+     * @return the registry key set.
+     */
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    public abstract io.papermc.paper.registry.set.@NotNull RegistryKeySet<org.bukkit.inventory.ItemType> getSupportedItems();
+
+    /**
+     * Provides the registry key set referencing the item types this enchantment can be applied to when
+     * enchanting in an enchantment table.
+     * <p>
+     * If this value is {@code null}, {@link #getSupportedItems()} will be sourced instead in the context of an enchantment table.
+     * Additionally, the tag {@link io.papermc.paper.registry.keys.tags.EnchantmentTagKeys#IN_ENCHANTING_TABLE} defines
+     * which enchantments can even show up in an enchantment table.
+     *
+     * @return the registry key set.
+     */
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    public abstract io.papermc.paper.registry.set.@Nullable RegistryKeySet<org.bukkit.inventory.ItemType> getPrimaryItems();
+
+    /**
+     * Provides the weight of this enchantment used by the weighted random when selecting enchantments.
+     *
+     * @return the weight value.
+     * @see <a href="https://minecraft.wiki/w/Enchanting">https://minecraft.wiki/w/Enchanting</a> for examplary weights.
+     */
+    public abstract int getWeight();
+
+    /**
+     * Provides the registry key set of enchantments that this enchantment is exclusive with.
+     * <p>
+     * Exclusive enchantments prohibit the application of this enchantment to an item if they are already present on
+     * said item.
+     *
+     * @return a registry set of enchantments exclusive to this one.
+     */
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    public abstract io.papermc.paper.registry.set.@NotNull RegistryKeySet<Enchantment> getExclusiveWith();
+    // Paper end - even more Enchantment API
 }

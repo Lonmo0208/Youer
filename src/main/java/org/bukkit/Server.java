@@ -1299,8 +1299,22 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
      *
      * @return a ban list of the specified type
      */
+    @Deprecated // Paper - add BanListType (which has a generic)
     @NotNull
     public <T extends BanList<?>> T getBanList(@NotNull BanList.Type type);
+
+    // Paper start - add BanListType (which has a generic)
+    /**
+     * Gets a ban list for the supplied type.
+     *
+     * @param type the type of list to fetch, cannot be null
+     * @param <B> The ban target
+     *
+     * @return a ban list of the specified type
+     */
+    @NotNull
+    <B extends BanList<E>, E> B getBanList(@NotNull io.papermc.paper.ban.BanListType<B> type);
+    // Paper end - add BanListType (which has a generic)
 
     /**
      * Gets a set containing all player operators.
@@ -2223,10 +2237,25 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
     boolean isStopping();
 
     /**
+     * Returns the {@link io.papermc.paper.entity.ai.MobGoals} manager
+     *
+     * @return the mob goals manager
+     */
+    @NotNull
+    io.papermc.paper.entity.ai.MobGoals getMobGoals();
+
+    /**
      * @return the datapack manager
      */
     @NotNull
     io.papermc.paper.datapack.DatapackManager getDatapackManager();
+
+    /**
+     * Gets the potion brewer.
+     *
+     * @return the potion brewer
+     */
+    @NotNull org.bukkit.potion.PotionBrewer getPotionBrewer();
 
     // Paper start - Folia region threading API
     /**
@@ -2344,6 +2373,14 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
     // Paper end - Folia region threading API
 
     boolean reloadCommandAliases(); // Paper
+
+    /**
+     * Checks if player names should be suggested when a command returns {@code null} as
+     * their tab completion result.
+     *
+     * @return true if player names should be suggested
+     */
+    boolean suggestPlayerNamesWhenNullTabCompletions();
 
     void reloadPermissions(); // Paper
 }

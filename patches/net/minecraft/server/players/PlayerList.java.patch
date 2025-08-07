@@ -111,7 +111,7 @@
          ServerLevel serverlevel = this.server.getLevel(resourcekey);
          ServerLevel serverlevel1;
          if (serverlevel == null) {
-@@ -161,36 +_,44 @@
+@@ -161,36 +_,47 @@
          } else {
              serverlevel1 = serverlevel;
          }
@@ -141,7 +141,10 @@
 +        serverlevel1 = ((CraftWorld) loc.getWorld()).getHandle();
 +        p_11263_.spawnIn(serverlevel1);
 +        p_11263_.gameMode.setLevel((net.minecraft.server.level.ServerLevel) p_11263_.level());
-+        p_11263_.absMoveTo(loc.getX(), loc.getY(), loc.getZ(), loc.getYaw(), loc.getPitch());
++        // Paper start - set raw so we aren't fully joined to the world (not added to chunk or world)
++        p_11263_.setPosRaw(loc.getX(), loc.getY(), loc.getZ());
++        p_11263_.setRot(loc.getYaw(), loc.getPitch());
++        // Paper end - set raw so we aren't fully joined to the world
 +        // Spigot end
 +
          LevelData leveldata = serverlevel1.getLevelData();
@@ -271,7 +274,7 @@
              );
              if (entity != null) {
                  UUID uuid;
-@@ -255,16 +_,27 @@
+@@ -255,16 +_,29 @@
  
                  if (!p_11263_.isPassenger()) {
                      LOGGER.warn("Couldn't reattach entity to player");
@@ -287,6 +290,8 @@
          }
  
          p_11263_.initInventoryMenu();
++
++        net.neoforged.neoforge.attachment.AttachmentSync.syncInitialPlayerAttachments(p_11263_);
 +        net.neoforged.neoforge.event.EventHooks.firePlayerLoggedIn( p_11263_ );
 +        // CraftBukkit - Moved from above, added world
 +        LOGGER.info(
@@ -541,7 +546,7 @@
          UUID uuid = p_295670_.getId();
          Set<ServerPlayer> set = Sets.newIdentityHashSet();
  
-@@ -434,72 +_,138 @@
+@@ -434,72 +_,139 @@
          }
  
          return !set.isEmpty();
@@ -631,6 +636,7 @@
 +        }
          serverplayer.initInventoryMenu();
          serverplayer.setHealth(serverplayer.getHealth());
++        net.neoforged.neoforge.attachment.AttachmentSync.syncInitialPlayerAttachments(serverplayer);
 +        net.neoforged.neoforge.event.EventHooks.firePlayerRespawnEvent(serverplayer, p_11238_);
          if (!p_11238_) {
              BlockPos blockpos = BlockPos.containing(dimensiontransition.pos());
@@ -873,7 +879,7 @@
      public UserWhiteList getWhiteList() {
          return this.whitelist;
      }
-@@ -682,13 +_,18 @@
+@@ -682,23 +_,36 @@
      public void sendLevelInfo(ServerPlayer p_11230_, ServerLevel p_11231_) {
          WorldBorder worldborder = this.server.overworld().getWorldBorder();
          p_11230_.connection.send(new ClientboundInitializeBorderPacket(worldborder));
@@ -895,7 +901,9 @@
          }
  
          p_11230_.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START, 0.0F));
-@@ -697,8 +_,15 @@
+         this.server.tickRateManager().updateJoiningPlayer(p_11230_);
++        net.neoforged.neoforge.attachment.AttachmentSync.syncInitialLevelAttachments(p_11231_, p_11230_);
+     }
  
      public void sendAllPlayerInfo(ServerPlayer p_11293_) {
          p_11293_.inventoryMenu.sendAllDataToRemote();

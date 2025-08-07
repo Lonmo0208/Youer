@@ -280,11 +280,25 @@
      }
  
      protected void tick() {
-@@ -1199,7 +_,7 @@
+@@ -1199,7 +_,21 @@
          });
      }
  
 -    class DistanceManager extends net.minecraft.server.level.DistanceManager {
++    // Neo: Getter for players watching an entity.
++    public List<ServerPlayer> getPlayersWatching(Entity entity) {
++        var trackedEntity = entityMap.get(entity.getId());
++        if (trackedEntity != null) {
++            var ret = new java.util.ArrayList<ServerPlayer>(trackedEntity.seenBy.size());
++            for (var connection : trackedEntity.seenBy) {
++                ret.add(connection.getPlayer());
++            }
++            return java.util.Collections.unmodifiableList(ret);
++        } else {
++            return List.of();
++        }
++    }
++
 +    public class DistanceManager extends net.minecraft.server.level.DistanceManager { // Paper - public
          protected DistanceManager(Executor p_140459_, Executor p_140460_) {
              super(p_140459_, p_140460_);
@@ -298,7 +312,7 @@
              this.entity = p_140478_;
              this.range = p_140479_;
              this.lastSectionPos = SectionPos.of(p_140478_);
-@@ -1281,6 +_,13 @@
+@@ -1281,9 +_,20 @@
                  boolean flag = d1 <= d2
                      && this.entity.broadcastToPlayer(p_140498_)
                      && ChunkMap.this.isChunkTracked(p_140498_, this.entity.chunkPosition().x, this.entity.chunkPosition().z);
@@ -311,7 +325,15 @@
 +
                  if (flag) {
                      if (this.seenBy.add(p_140498_.connection)) {
-                         this.serverEntity.addPairing(p_140498_);
+-                        this.serverEntity.addPairing(p_140498_);
++                        // Paper start - entity tracking events
++                        if (io.papermc.paper.event.player.PlayerTrackEntityEvent.getHandlerList().getRegisteredListeners().length == 0 || new io.papermc.paper.event.player.PlayerTrackEntityEvent(p_140498_.getBukkitEntity(), this.entity.getBukkitEntity()).callEvent()) {
++                            this.serverEntity.addPairing(p_140498_);
++                        }
++                        // Paper end - entity tracking events
+                     }
+                 } else if (this.seenBy.remove(p_140498_.connection)) {
+                     this.serverEntity.removePairing(p_140498_);
 @@ -1312,6 +_,32 @@
              for (ServerPlayer serverplayer : p_140488_) {
                  this.updatePlayer(serverplayer);

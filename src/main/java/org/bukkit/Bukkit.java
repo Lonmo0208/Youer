@@ -335,6 +335,15 @@ public final class Bukkit {
     }
 
     /**
+     * Gets the potion brewer.
+     *
+     * @return the potion brewer
+     */
+    public static @NotNull org.bukkit.potion.PotionBrewer getPotionBrewer() {
+        return server.getPotionBrewer();
+    }
+
+    /**
      * Gets the resource pack configured to be sent to clients by the server.
      *
      * @return the resource pack
@@ -1533,9 +1542,24 @@ public final class Bukkit {
      * @return a ban list of the specified type
      */
     @NotNull
+    @Deprecated(since = "1.20.4") // Paper - add BanListType (which has a generic)
     public static <T extends BanList<?>> T getBanList(@NotNull BanList.Type type) {
         return server.getBanList(type);
     }
+    // Paper start - add BanListType (which has a generic)
+    /**
+     * Gets a ban list for the supplied type.
+     *
+     * @param type the type of list to fetch, cannot be null
+     * @param <B> The ban target
+     *
+     * @return a ban list of the specified type
+     */
+    @NotNull
+    public static <B extends BanList<E>, E> B getBanList(final io.papermc.paper.ban.@NotNull BanListType<B> type) {
+        return server.getBanList(type);
+    }
+    // Paper end - add BanListType (which has a generic)
 
     /**
      * Gets a set containing all player operators.
@@ -2574,6 +2598,16 @@ public final class Bukkit {
     }
 
     /**
+     * Returns the {@link io.papermc.paper.entity.ai.MobGoals} manager
+     *
+     * @return the mob goals manager
+     */
+    @NotNull
+    public static io.papermc.paper.entity.ai.MobGoals getMobGoals() {
+        return server.getMobGoals();
+    }
+
+    /**
      * @return the datapack manager
      */
     @NotNull
@@ -2723,5 +2757,15 @@ public final class Bukkit {
      */
     public static boolean reloadCommandAliases() {
         return server.reloadCommandAliases();
+    }
+
+    /**
+     * Checks if player names should be suggested when a command returns {@code null} as
+     * their tab completion result.
+     *
+     * @return true if player names should be suggested
+     */
+    public static boolean suggestPlayerNamesWhenNullTabCompletions() {
+        return server.suggestPlayerNamesWhenNullTabCompletions();
     }
 }
