@@ -25,19 +25,17 @@
              CrossbowItem.ChargingSounds crossbowitem$chargingsounds = this.getChargingSounds(p_40875_);
              crossbowitem$chargingsounds.end()
                  .ifPresent(
-@@ -109,7 +_,11 @@
+@@ -109,6 +_,10 @@
      }
  
      private static boolean tryLoadProjectiles(LivingEntity p_40860_, ItemStack p_40861_) {
--        List<ItemStack> list = draw(p_40861_, p_40860_.getProjectile(p_40861_), p_40860_);
 +        // Paper start - Add EntityLoadCrossbowEvent
 +        return CrossbowItem.tryLoadProjectiles(p_40860_, p_40861_, true);
 +    }
 +    private static boolean tryLoadProjectiles(LivingEntity p_40860_, ItemStack p_40861_, boolean consume) {
-+        List<ItemStack> list = draw(p_40861_, p_40860_.getProjectile(p_40861_), p_40860_, consume);
+         List<ItemStack> list = draw(p_40861_, p_40860_.getProjectile(p_40861_), p_40860_);
          if (!list.isEmpty()) {
              p_40861_.set(DataComponents.CHARGED_PROJECTILES, ChargedProjectiles.of(list));
-             return true;
 @@ -161,7 +_,11 @@
      @Override
      protected Projectile createProjectile(Level p_331583_, LivingEntity p_40863_, ItemStack p_40864_, ItemStack p_40865_, boolean p_40866_) {

@@ -694,8 +694,8 @@ public class CraftWorld extends CraftRegionAccessor implements World {
 
     @Override
     public Location findLightningTarget(Location location) {
-        final BlockPos pos = this.world.findLightningTargetAround(io.papermc.paper.util.MCUtil.toBlockPosition(location), true);
-        return pos == null ? null : io.papermc.paper.util.MCUtil.toLocation(this.world, pos);
+        final BlockPos pos = this.world.findLightningTargetAround(io.papermc.paper.util.MCUtil.toBlockPosition(location));
+        return io.papermc.paper.util.MCUtil.toLocation(this.world, pos);
     }
     // Paper end - Add methods to find targets for lightning strikes
 
