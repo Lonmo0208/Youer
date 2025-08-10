@@ -24,9 +24,25 @@ public interface OfflinePlayer extends ServerOperator, AnimalTamer, Configuratio
     /**
      * Checks if this player is currently online
      *
+     * It should be noted that this will return true if any instance of this player is
+     * online! This instance may have disconnected. If you wish to check if this specific
+     * instance of the player is still online, see {@link OfflinePlayer#isConnected()}.
+     *
      * @return true if they are online
      */
     public boolean isOnline();
+
+    // Paper start
+    /**
+     * Checks whether the connection to this player is still valid. This will return
+     * true as long as this specific instance of the player is still connected. This
+     * will return false after this instance has disconnected, even if the same player
+     * has reconnected since.
+     *
+     * @return true if this player instance is connected
+     */
+    public boolean isConnected();
+    // Paper end
 
     /**
      * Returns the name of this player
@@ -80,7 +96,7 @@ public interface OfflinePlayer extends ServerOperator, AnimalTamer, Configuratio
      *     (updated) previous ban
      */
     @Nullable
-    public BanEntry<PlayerProfile> ban(@Nullable String reason, @Nullable Date expires, @Nullable String source);
+    public <E extends BanEntry<? super io.papermc.paper.profile.PlayerProfile>> E ban(@Nullable String reason, @Nullable Date expires, @Nullable String source); // Paper - fix ban list API
 
     /**
      * Adds this user to the {@link ProfileBanList}. If a previous ban exists, this will
@@ -94,7 +110,7 @@ public interface OfflinePlayer extends ServerOperator, AnimalTamer, Configuratio
      *     (updated) previous ban
      */
     @Nullable
-    public BanEntry<PlayerProfile> ban(@Nullable String reason, @Nullable Instant expires, @Nullable String source);
+    public <E extends BanEntry<? super io.papermc.paper.profile.PlayerProfile>> E ban(@Nullable String reason, @Nullable Instant expires, @Nullable String source); // Paper - fix ban list API
 
     /**
      * Adds this user to the {@link ProfileBanList}. If a previous ban exists, this will
@@ -108,7 +124,7 @@ public interface OfflinePlayer extends ServerOperator, AnimalTamer, Configuratio
      *     (updated) previous ban
      */
     @Nullable
-    public BanEntry<PlayerProfile> ban(@Nullable String reason, @Nullable Duration duration, @Nullable String source);
+    public <E extends BanEntry<? super io.papermc.paper.profile.PlayerProfile>> E ban(@Nullable String reason, @Nullable Duration duration, @Nullable String source); // Paper - fix ban list API
 
     /**
      * Checks if this player is whitelisted or not

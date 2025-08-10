@@ -198,6 +198,17 @@ public class CraftWorld extends CraftRegionAccessor implements World {
         this.voidDamageMinBuildHeightOffset = minBuildHeightOffset;
     }
     // Paper end - void damage configuration
+
+    // Paper start - structure check API
+    @Override
+    public boolean hasStructureAt(final io.papermc.paper.math.Position position, final Structure structure) {
+        return this.world.structureManager().getStructureWithPieceAt(
+                io.papermc.paper.util.MCUtil.toBlockPos(position),
+                CraftStructure.bukkitToMinecraft(structure)
+        ).isValid();
+    }
+    // Paper end
+
     private static final Random rand = new Random();
 
     public CraftWorld(ServerLevel world, ChunkGenerator gen, BiomeProvider biomeProvider, Environment env) {
@@ -671,6 +682,23 @@ public class CraftWorld extends CraftRegionAccessor implements World {
         return (LightningStrike) lightning.getBukkitEntity();
     }
 
+    // Paper start - Add methods to find targets for lightning strikes
+    @Override
+    public Location findLightningRod(Location location) {
+        return this.world.findLightningRod(io.papermc.paper.util.MCUtil.toBlockPosition(location))
+                .map(blockPos -> io.papermc.paper.util.MCUtil.toLocation(this.world, blockPos)
+                        // get the actual rod pos
+                        .subtract(0, 1, 0))
+                .orElse(null);
+    }
+
+    @Override
+    public Location findLightningTarget(Location location) {
+        final BlockPos pos = this.world.findLightningTargetAround(io.papermc.paper.util.MCUtil.toBlockPosition(location), true);
+        return pos == null ? null : io.papermc.paper.util.MCUtil.toLocation(this.world, pos);
+    }
+    // Paper end - Add methods to find targets for lightning strikes
+
     @Override
     public boolean generateTree(Location loc, TreeType type) {
         return this.generateTree(loc, CraftWorld.rand, type);
@@ -761,6 +789,13 @@ public class CraftWorld extends CraftRegionAccessor implements World {
             cp.getHandle().connection.send(new ClientboundSetTimePacket(cp.getHandle().level().getGameTime(), cp.getHandle().getPlayerTime(), cp.getHandle().level().getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)));
         }
     }
+
+    // Paper start
+    @Override
+    public boolean isDayTime() {
+        return getHandle().isDay();
+    }
+    // Paper end
 
     @Override
     public long getGameTime() {

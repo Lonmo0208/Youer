@@ -58,7 +58,7 @@
  import net.minecraft.world.level.entity.EntityAccess;
  import net.minecraft.world.level.entity.EntityInLevelCallback;
  import net.minecraft.world.level.gameevent.DynamicGameEventListener;
-@@ -126,9 +_,28 @@
+@@ -126,9 +_,31 @@
  import net.minecraft.world.scores.PlayerTeam;
  import net.minecraft.world.scores.ScoreHolder;
  import net.minecraft.world.scores.Team;
@@ -77,11 +77,14 @@
 +import org.bukkit.event.entity.EntityCombustEvent;
 +import org.bukkit.event.entity.EntityDismountEvent;
 +import org.bukkit.event.entity.EntityPortalEvent;
++import org.bukkit.event.entity.EntityPoseChangeEvent;
 +import org.bukkit.event.entity.EntityRemoveEvent;
++import org.bukkit.event.entity.EntityUnleashEvent;
 +import org.bukkit.event.player.PlayerTeleportEvent;
 +import org.bukkit.event.vehicle.VehicleExitEvent;
  import org.slf4j.Logger;
 +import org.spigotmc.ActivationRange;
++import org.spigotmc.AsyncCatcher;
  
 -public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess, CommandSource, ScoreHolder, net.neoforged.neoforge.common.extensions.IEntityExtension {
 +public abstract class Entity extends net.neoforged.neoforge.attachment.AttachmentHolder implements SyncedDataHolder, Nameable, EntityAccess, CommandSource, ScoreHolder, net.neoforged.neoforge.common.extensions.IEntityExtension {
@@ -370,6 +373,24 @@
      protected abstract void defineSynchedData(SynchedEntityData.Builder p_326003_);
  
      public SynchedEntityData getEntityData() {
+@@ -357,6 +_,17 @@
+     }
+ 
+     public void setPose(Pose p_20125_) {
++        if (this.fixedPose) return; // Paper - Expand Pose API
++        // CraftBukkit start
++        if (p_20125_ == this.getPose()) {
++            return;
++        }
++        // Paper start - Don't fire sync event during generation
++        if (!this.generation) {
++            this.level.getCraftServer().getPluginManager().callEvent(new EntityPoseChangeEvent(this.getBukkitEntity(), org.bukkit.entity.Pose.values()[p_20125_.ordinal()]));
++        }
++        // Paper end - Don't fire sync event during generation
++        // CraftBukkit end
+         this.entityData.set(DATA_POSE, p_20125_);
+     }
+ 
 @@ -379,7 +_,33 @@
          return Mth.lengthSquared(d0, d2) < Mth.square(p_216994_) && Mth.square(d1) < Mth.square(p_216995_);
      }
@@ -1024,19 +1045,24 @@
              this.level().addFreshEntity(itementity);
              return itementity;
          }
-@@ -1904,6 +_,12 @@
+@@ -1904,7 +_,16 @@
          if (this.isAlive() && this instanceof Leashable leashable) {
              if (leashable.getLeashHolder() == p_19978_) {
                  if (!this.level().isClientSide()) {
+-                    leashable.dropLeash(true, !p_19978_.hasInfiniteMaterials());
 +                    // CraftBukkit start - fire PlayerUnleashEntityEvent
-+                    if (CraftEventFactory.callPlayerUnleashEntityEvent(this, p_19978_, p_19979_).isCancelled()) {
++                    // Paper start - Expand EntityUnleashEvent
++                    org.bukkit.event.player.PlayerUnleashEntityEvent event = CraftEventFactory.callPlayerUnleashEntityEvent(this, p_19978_, p_19979_, !p_19978_.hasInfiniteMaterials());
++                    if (event.isCancelled()) {
++                        // Paper end - Expand EntityUnleashEvent
 +                        ((net.minecraft.server.level.ServerPlayer) p_19978_).connection.send(new net.minecraft.network.protocol.game.ClientboundSetEntityLinkPacket(this, leashable.getLeashHolder()));
 +                        return InteractionResult.PASS;
 +                    }
 +                    // CraftBukkit end
-                     leashable.dropLeash(true, !p_19978_.hasInfiniteMaterials());
++                    leashable.dropLeash(true, event.isDropLeash()); // Paper - Expand EntityUnleashEvent
                      this.gameEvent(GameEvent.ENTITY_INTERACT, p_19978_);
                  }
+ 
 @@ -1914,6 +_,13 @@
              ItemStack itemstack = p_19978_.getItemInHand(p_19979_);
              if (itemstack.is(Items.LEAD) && leashable.canHaveALeashAttachedToIt()) {
@@ -1203,22 +1229,26 @@
      }
  
      public int getAirSupply() {
-@@ -2336,7 +_,18 @@
+@@ -2336,7 +_,22 @@
      }
  
      public void setAirSupply(int p_20302_) {
 -        this.entityData.set(DATA_AIR_SUPPLY_ID, p_20302_);
 +        // CraftBukkit start
-+        org.bukkit.event.entity.EntityAirChangeEvent event = new org.bukkit.event.entity.EntityAirChangeEvent(this.getBukkitEntity(), p_20302_);
-+        // Suppress during worldgen
-+        if (this.valid) {
-+            event.getEntity().getServer().getPluginManager().callEvent(event);
++        if (!AsyncCatcher.catchAsync()) {
++            org.bukkit.event.entity.EntityAirChangeEvent event = new org.bukkit.event.entity.EntityAirChangeEvent(this.getBukkitEntity(), p_20302_);
++            // Suppress during worldgen
++            if (this.valid) {
++                event.getEntity().getServer().getPluginManager().callEvent(event);
++            }
++            if (event.isCancelled() && this.getAirSupply() != p_20302_) {
++                this.entityData.markDirty(Entity.DATA_AIR_SUPPLY_ID);
++                return;
++            }
++            p_20302_ = event.getAmount();
 +        }
-+        if (event.isCancelled() && this.getAirSupply() != p_20302_) {
-+            this.entityData.markDirty(Entity.DATA_AIR_SUPPLY_ID);
-+            return;
-+        }
-+        this.entityData.set(Entity.DATA_AIR_SUPPLY_ID, event.getAmount());
++
++        this.entityData.set(Entity.DATA_AIR_SUPPLY_ID, p_20302_);
 +        // CraftBukkit end
      }
  
@@ -1315,6 +1345,21 @@
 +                if (this != entity2 && this.inWorld) { // CraftBukkit - Don't spawn the new entity if the current entity isn't spawned
                      serverlevel1.addDuringTeleport(entity2);
                  }
+ 
+@@ -2595,8 +_,12 @@
+ 
+     protected void removeAfterChangingDimensions() {
+         this.setRemoved(Entity.RemovalReason.CHANGED_DIMENSION);
+-        if (this instanceof Leashable leashable) {
+-            leashable.dropLeash(true, false);
++        if (this instanceof Leashable leashable && leashable.isLeashed()) { // Paper - only call if it is leashed
++            // Paper start - Expand EntityUnleashEvent
++            final EntityUnleashEvent event = new EntityUnleashEvent(this.getBukkitEntity(), EntityUnleashEvent.UnleashReason.UNKNOWN, false); // CraftBukkit
++            event.callEvent();
++            leashable.dropLeash(true, event.isDropLeash());
++            // Paper end - Expand EntityUnleashEvent
+         }
+     }
  
 @@ -2667,6 +_,7 @@
          return this.stringUUID;

@@ -12,6 +12,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.Entity;
@@ -125,6 +126,13 @@ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
 
     // Paper start
     @Override
+    public void setHurtDirection(float hurtDirection) {
+        this.getHandle().hurtDir = hurtDirection;
+    }
+    // Paper end
+
+    // Paper start
+    @Override
     public boolean isDeeplySleeping() {
         return getHandle().isSleepingLongEnough();
     }
@@ -134,6 +142,23 @@ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
     public int getSleepTicks() {
         return this.getHandle().sleepCounter;
     }
+
+    // Paper start - Potential bed api
+    @Override
+    public Location getPotentialBedLocation() {
+        ServerPlayer handle = (ServerPlayer) getHandle();
+        BlockPos bed = handle.getRespawnPosition();
+        if (bed == null) {
+            return null;
+        }
+
+        ServerLevel worldServer = handle.server.getLevel(handle.getRespawnDimension());
+        if (worldServer == null) {
+            return null;
+        }
+        return new Location(worldServer.getWorld(), bed.getX(), bed.getY(), bed.getZ());
+    }
+    // Paper end
 
     // Paper start
     @Override
@@ -338,6 +363,70 @@ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
         this.getHandle().containerMenu.checkReachable = false;
         return this.getHandle().containerMenu.getBukkitView();
     }
+
+    // Paper start - Add additional containers
+    @Override
+    public InventoryView openAnvil(Location location, boolean force) {
+        return this.openInventory(location, force, Material.ANVIL);
+    }
+
+    @Override
+    public InventoryView openCartographyTable(Location location, boolean force) {
+        return this.openInventory(location, force, Material.CARTOGRAPHY_TABLE);
+    }
+
+    @Override
+    public InventoryView openGrindstone(Location location, boolean force) {
+        return this.openInventory(location, force, Material.GRINDSTONE);
+    }
+
+    @Override
+    public InventoryView openLoom(Location location, boolean force) {
+        return this.openInventory(location, force, Material.LOOM);
+    }
+
+    @Override
+    public InventoryView openSmithingTable(Location location, boolean force) {
+        return this.openInventory(location, force, Material.SMITHING_TABLE);
+    }
+
+    @Override
+    public InventoryView openStonecutter(Location location, boolean force) {
+        return this.openInventory(location, force, Material.STONECUTTER);
+    }
+
+    private InventoryView openInventory(Location location, boolean force, Material material) {
+        org.spigotmc.AsyncCatcher.catchOp("open" + material);
+        if (location == null) {
+            location = this.getLocation();
+        }
+        if (!force) {
+            Block block = location.getBlock();
+            if (block.getType() != material) {
+                return null;
+            }
+        }
+        net.minecraft.world.level.block.Block block;
+        if (material == Material.ANVIL) {
+            block = Blocks.ANVIL;
+        } else if (material == Material.CARTOGRAPHY_TABLE) {
+            block = Blocks.CARTOGRAPHY_TABLE;
+        } else if (material == Material.GRINDSTONE) {
+            block = Blocks.GRINDSTONE;
+        } else if (material == Material.LOOM) {
+            block = Blocks.LOOM;
+        } else if (material == Material.SMITHING_TABLE) {
+            block = Blocks.SMITHING_TABLE;
+        } else if (material == Material.STONECUTTER) {
+            block = Blocks.STONECUTTER;
+        } else {
+            throw new IllegalArgumentException("Unsupported inventory type: " + material);
+        }
+        this.getHandle().openMenu(block.getMenuProvider(null, this.getHandle().level(), new BlockPos(location.getBlockX(), location.getBlockY(), location.getBlockZ())));
+        this.getHandle().containerMenu.checkReachable = !force;
+        return this.getHandle().containerMenu.getBukkitView();
+    }
+    // Paper end
 
     private static void openCustomInventory(Inventory inventory, ServerPlayer player, MenuType<?> windowType) {
         if (player.connection == null) return;
@@ -549,6 +638,33 @@ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
 
         this.getHandle().getCooldowns().addCooldown(CraftItemType.bukkitToMinecraft(material), ticks);
     }
+
+    // Paper start
+    @Override
+    public org.bukkit.entity.Entity releaseLeftShoulderEntity() {
+        if (!getHandle().getShoulderEntityLeft().isEmpty()) {
+            Entity entity = getHandle().releaseLeftShoulderEntity();
+            if (entity != null) {
+                return entity.getBukkitEntity();
+            }
+        }
+
+        return null;
+    }
+
+    @Override
+    public org.bukkit.entity.Entity releaseRightShoulderEntity() {
+        if (!getHandle().getShoulderEntityRight().isEmpty()) {
+            Entity entity = getHandle().releaseRightShoulderEntity();
+            if (entity != null) {
+                return entity.getBukkitEntity();
+            }
+        }
+
+        return null;
+    }
+    // Paper end
+
 
     @Override
     public boolean discoverRecipe(NamespacedKey recipe) {

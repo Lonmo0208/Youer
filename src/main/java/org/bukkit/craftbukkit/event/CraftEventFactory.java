@@ -389,10 +389,11 @@ public class CraftEventFactory {
         return tradeSelectEvent;
     }
 
+    @SuppressWarnings("deprecation") // Paper use deprecated event to maintain compat (it extends modern event)
     public static boolean handleBellRingEvent(Level world, BlockPos position, Direction direction, Entity entity) {
         Block block = CraftBlock.at(world, position);
         BlockFace bukkitDirection = CraftBlock.notchToBlockFace(direction);
-        BellRingEvent event = new BellRingEvent(block, bukkitDirection, (entity != null) ? entity.getBukkitEntity() : null);
+        BellRingEvent event = new io.papermc.paper.event.block.BellRingEvent(block, bukkitDirection, (entity != null) ? entity.getBukkitEntity() : null); // Paper - deprecated BellRingEvent
         Bukkit.getPluginManager().callEvent(event);
         return !event.isCancelled();
     }
@@ -651,13 +652,13 @@ public class CraftEventFactory {
     /**
      * BlockDamageEvent
      */
-    public static BlockDamageEvent callBlockDamageEvent(ServerPlayer who, BlockPos pos, ItemStack itemstack, boolean instaBreak) {
+    public static BlockDamageEvent callBlockDamageEvent(ServerPlayer who, BlockPos pos, Direction direction, ItemStack itemstack, boolean instaBreak) { // Paper - Add BlockFace to BlockDamageEvent
         Player player = who.getBukkitEntity();
         CraftItemStack itemInHand = CraftItemStack.asCraftMirror(itemstack);
 
         Block blockClicked = CraftBlock.at(who.level(), pos);
 
-        BlockDamageEvent event = new BlockDamageEvent(player, blockClicked, itemInHand, instaBreak);
+        BlockDamageEvent event = new BlockDamageEvent(player, blockClicked, CraftBlock.notchToBlockFace(direction), itemInHand, instaBreak); // Paper - Add BlockFace to BlockDamageEvent
         player.getServer().getPluginManager().callEvent(event);
 
         return event;
@@ -972,7 +973,7 @@ public class CraftEventFactory {
         for (org.bukkit.inventory.ItemStack stack : event.getDrops()) {
             if (stack == null || stack.getType() == Material.AIR) continue;
 
-            victim.drop(CraftItemStack.asNMSCopy(stack), true, false, false); // SPIGOT-7800, SPIGOT-7801: Vanilla Behaviour for dropped items
+            //victim.drop(CraftItemStack.asNMSCopy(stack), true, false, false); // SPIGOT-7800, SPIGOT-7801: Vanilla Behaviour for dropped items
         }
 
         return event;
@@ -1194,13 +1195,24 @@ public class CraftEventFactory {
         return event;
     }
 
-    public static PlayerItemMendEvent callPlayerItemMendEvent(net.minecraft.world.entity.player.Player entity, net.minecraft.world.entity.ExperienceOrb orb, net.minecraft.world.item.ItemStack nmsMendedItem, net.minecraft.world.entity.EquipmentSlot slot, int repairAmount) {
+    public static PlayerItemMendEvent callPlayerItemMendEvent(net.minecraft.world.entity.player.Player entity, net.minecraft.world.entity.ExperienceOrb orb, net.minecraft.world.item.ItemStack nmsMendedItem, net.minecraft.world.entity.EquipmentSlot slot, int repairAmount, int consumedExperience) { // Paper - Expand PlayerItemMendEvent
         Player player = (Player) entity.getBukkitEntity();
         org.bukkit.inventory.ItemStack bukkitStack = CraftItemStack.asCraftMirror(nmsMendedItem);
-        PlayerItemMendEvent event = new PlayerItemMendEvent(player, bukkitStack, CraftEquipmentSlot.getSlot(slot), (ExperienceOrb) orb.getBukkitEntity(), repairAmount);
+        PlayerItemMendEvent event = new PlayerItemMendEvent(player, bukkitStack, CraftEquipmentSlot.getSlot(slot), (ExperienceOrb) orb.getBukkitEntity(), repairAmount, consumedExperience); // Paper - Expand PlayerItemMendEvent
         Bukkit.getPluginManager().callEvent(event);
         return event;
     }
+
+    // Paper start - Add orb
+    public static PlayerExpChangeEvent callPlayerExpChangeEvent(net.minecraft.world.entity.player.Player entity, net.minecraft.world.entity.ExperienceOrb entityOrb) {
+        Player player = (Player) entity.getBukkitEntity();
+        ExperienceOrb source = (ExperienceOrb) entityOrb.getBukkitEntity();
+        int expAmount = source.getExperience();
+        PlayerExpChangeEvent event = new PlayerExpChangeEvent(player, source, expAmount);
+        Bukkit.getPluginManager().callEvent(event);
+        return event;
+    }
+    // Paper end
 
     public static boolean handleBlockGrowEvent(Level world, BlockPos pos, net.minecraft.world.level.block.state.BlockState block) {
         return CraftEventFactory.handleBlockGrowEvent(world, pos, block, 3);
@@ -1567,8 +1579,10 @@ public class CraftEventFactory {
         Bukkit.getPluginManager().callEvent(new PlayerRecipeBookSettingsChangeEvent(player.getBukkitEntity(), bukkitType, open, filter));
     }
 
-    public static PlayerUnleashEntityEvent callPlayerUnleashEntityEvent(Entity entity, net.minecraft.world.entity.player.Player player, InteractionHand enumhand) {
-        PlayerUnleashEntityEvent event = new PlayerUnleashEntityEvent(entity.getBukkitEntity(), (Player) player.getBukkitEntity(), CraftEquipmentSlot.getHand(enumhand));
+    // Paper start - Expand EntityUnleashEvent
+    public static PlayerUnleashEntityEvent callPlayerUnleashEntityEvent(Entity entity, net.minecraft.world.entity.player.Player player, InteractionHand enumhand, boolean dropLeash) {
+        PlayerUnleashEntityEvent event = new PlayerUnleashEntityEvent(entity.getBukkitEntity(), (Player) player.getBukkitEntity(), CraftEquipmentSlot.getHand(enumhand), dropLeash);
+        // Paper end - Expand EntityUnleashEvent
         entity.level().getCraftServer().getPluginManager().callEvent(event);
         return event;
     }
@@ -2037,4 +2051,28 @@ public class CraftEventFactory {
 
         Bukkit.getPluginManager().callEvent(new EntityRemoveEvent(entity.getBukkitEntity(), cause));
     }
+
+    // Paper start - WitchReadyPotionEvent
+    public static ItemStack handleWitchReadyPotionEvent(net.minecraft.world.entity.monster.Witch witch, @Nullable ItemStack potion) {
+        io.papermc.paper.event.entity.WitchReadyPotionEvent event = new io.papermc.paper.event.entity.WitchReadyPotionEvent((org.bukkit.entity.Witch) witch.getBukkitEntity(), CraftItemStack.asCraftMirror(potion));
+        if (!event.callEvent() || event.getPotion() == null) {
+            return ItemStack.EMPTY;
+        }
+        return org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getPotion());
+    }
+    // Paper end - WitchReadyPotionEvent
+
+    // Paper start
+    public static boolean handleBlockFailedDispenseEvent(ServerLevel serverLevel, BlockPos pos) {
+        org.bukkit.block.Block block = CraftBlock.at(serverLevel, pos);
+        io.papermc.paper.event.block.BlockFailedDispenseEvent event = new io.papermc.paper.event.block.BlockFailedDispenseEvent(block);
+        return event.callEvent();
+    }
+
+    public static boolean handleBlockPreDispenseEvent(ServerLevel serverLevel, BlockPos pos, ItemStack itemStack, int slot) {
+        org.bukkit.block.Block block = CraftBlock.at(serverLevel, pos);
+        io.papermc.paper.event.block.BlockPreDispenseEvent event = new io.papermc.paper.event.block.BlockPreDispenseEvent(block, org.bukkit.craftbukkit.inventory.CraftItemStack.asCraftMirror(itemStack), slot);
+        return event.callEvent();
+    }
+    // Paper end
 }

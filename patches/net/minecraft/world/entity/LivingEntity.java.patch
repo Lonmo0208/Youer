@@ -427,7 +427,7 @@
      public Collection<MobEffectInstance> getActiveEffects() {
          return this.activeEffects.values();
      }
-@@ -925,22 +_,55 @@
+@@ -925,22 +_,60 @@
      }
  
      public final boolean addEffect(MobEffectInstance p_21165_) {
@@ -441,10 +441,15 @@
 +    }
 +
 +    // Youer start
-+    private static AtomicReference<EntityPotionEffectEvent.Cause> addEffectCause = new AtomicReference<>(EntityPotionEffectEvent.Cause.UNKNOWN);
++    private final AtomicReference<EntityPotionEffectEvent.Cause> addEffect$Cause = new AtomicReference<>(EntityPotionEffectEvent.Cause.UNKNOWN);
++    private final AtomicBoolean addEffect$fireEvent = new AtomicBoolean(true);
++
++    public void AddEffect$fireEvent(boolean value) {
++        this.addEffect$fireEvent.set(value);
++    }
 +
 +    public void addEffectCause(EntityPotionEffectEvent.Cause cause) {
-+        addEffectCause.set(cause);
++        this.addEffect$Cause.set(cause);
      }
  
      public boolean addEffect(MobEffectInstance p_147208_, @Nullable Entity p_147209_) {
@@ -462,12 +467,12 @@
 +                override = new MobEffectInstance(mobeffectinstance).update(p_147208_);
 +            }
 +
-+            if (!isAsync) {
-+                org.bukkit.event.entity.EntityPotionEffectEvent event = CraftEventFactory.callEntityPotionEffectChangeEvent(this, mobeffectinstance, p_147208_, addEffectCause.getAndSet(EntityPotionEffectEvent.Cause.UNKNOWN), override);
++            if (!isAsync && addEffect$fireEvent.getAndSet(true)) {
++                org.bukkit.event.entity.EntityPotionEffectEvent event = CraftEventFactory.callEntityPotionEffectChangeEvent(this, mobeffectinstance, p_147208_, addEffect$Cause.getAndSet(EntityPotionEffectEvent.Cause.UNKNOWN), override);
++                override = event.isOverride(); // Paper - Don't fire sync event during generation
 +                if (event.isCancelled()) {
 +                    return false;
 +                }
-+                override = event.isOverride();
 +            }
 +            // CraftBukkit end
 +
@@ -486,12 +491,18 @@
                  flag = true;
              }
  
-@@ -949,6 +_,20 @@
+@@ -949,6 +_,26 @@
          }
      }
  
-+    public boolean addEffect(MobEffectInstance pEffectInstance, @Nullable Entity pEntity, EntityPotionEffectEvent.Cause cause) {
-+        addEffectCause.set(cause);
++    public boolean addEffect(MobEffectInstance mobeffect, @Nullable Entity entity, EntityPotionEffectEvent.Cause cause) {
++        // Paper start - Don't fire sync event during generation
++        return this.addEffect(mobeffect, entity, cause, true);
++    }
++
++    public boolean addEffect(MobEffectInstance pEffectInstance, @Nullable Entity pEntity, EntityPotionEffectEvent.Cause cause, boolean fireEvent) {
++        addEffect$Cause.set(cause);
++        addEffect$fireEvent.set(fireEvent);
 +        return addEffect(pEffectInstance, pEntity);
 +    }
 +    // Youer end
@@ -1134,7 +1145,7 @@
                  }
  
                  return p_21194_;
-@@ -1677,22 +_,156 @@
+@@ -1677,22 +_,166 @@
          }
      }
  
@@ -1174,7 +1185,17 @@
 +            }
 +
 +            if (damagesource.getEntity() instanceof Player) {
-+                ((Player) damagesource.getEntity()).resetAttackStrengthTicker(); // Moved from Player in order to make the cooldown reset get called after the damage event is fired
++                // Paper start - PlayerAttackEntityCooldownResetEvent
++                //((net.minecraft.world.entity.player.Player) damagesource.getEntity()).resetAttackStrengthTicker(); // Moved from EntityHuman in order to make the cooldown reset get called after the damage event is fired
++                if (damagesource.getEntity() instanceof ServerPlayer) {
++                    ServerPlayer player = (ServerPlayer) damagesource.getEntity();
++                    if (new io.papermc.paper.event.player.PlayerAttackEntityCooldownResetEvent(player.getBukkitEntity(), this.getBukkitEntity(), player.getAttackStrengthScale(0F)).callEvent()) {
++                        player.resetAttackStrengthTicker();
++                    }
++                } else {
++                    ((net.minecraft.world.entity.player.Player) damagesource.getEntity()).resetAttackStrengthTicker();
++                }
++                // Paper end - PlayerAttackEntityCooldownResetEvent
 +            }
 +
 +            // Resistance
@@ -1555,6 +1576,15 @@
              this.dismountVehicle(entity);
          }
      }
+@@ -2891,7 +_,7 @@
+         } else {
+             Vec3 vec3 = new Vec3(this.getX(), this.getEyeY(), this.getZ());
+             Vec3 vec31 = new Vec3(p_147185_.getX(), p_147185_.getEyeY(), p_147185_.getZ());
+-            return vec31.distanceTo(vec3) > 128.0
++            return vec31.distanceTo(vec3) > 128.0D * 128.0D // Paper - Perf: Use distance squared
+                 ? false
+                 : this.level().clip(new ClipContext(vec3, vec31, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, this)).getType() == HitResult.Type.MISS;
+         }
 @@ -2913,13 +_,20 @@
  
      @Override
@@ -1707,10 +1737,11 @@
                  }
              }
          }
-@@ -3136,7 +_,11 @@
+@@ -3136,7 +_,12 @@
  
      public void releaseUsingItem() {
          if (!this.useItem.isEmpty()) {
++            if (this instanceof ServerPlayer) new io.papermc.paper.event.player.PlayerStopUsingItemEvent((org.bukkit.entity.Player) getBukkitEntity(), useItem.asBukkitMirror(), getTicksUsingItem()).callEvent(); // Paper - Add PlayerStopUsingItemEvent
 +            if (!net.neoforged.neoforge.event.EventHooks.onUseItemStop(this, useItem, this.getUseItemRemainingTicks())) {
 +                ItemStack copy = this instanceof Player ? useItem.copy() : null;
              this.useItem.releaseUsing(this.level(), this, this.getUseItemRemainingTicks());

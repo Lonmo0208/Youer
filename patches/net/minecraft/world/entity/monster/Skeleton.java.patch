@@ -1,6 +1,15 @@
 --- a/net/minecraft/world/entity/monster/Skeleton.java
 +++ b/net/minecraft/world/entity/monster/Skeleton.java
-@@ -86,7 +_,9 @@
+@@ -16,7 +_,7 @@
+     private static final int TOTAL_CONVERSION_TIME = 300;
+     public static final EntityDataAccessor<Boolean> DATA_STRAY_CONVERSION_ID = SynchedEntityData.defineId(Skeleton.class, EntityDataSerializers.BOOLEAN);
+     public static final String CONVERSION_TAG = "StrayConversionTime";
+-    private int inPowderSnowTime;
++    public int inPowderSnowTime;
+     public int conversionTime;
+ 
+     public Skeleton(EntityType<? extends Skeleton> p_33570_, Level p_33571_) {
+@@ -86,10 +_,17 @@
      }
  
      protected void doFreezeConversion() {
@@ -11,3 +20,11 @@
          if (!this.isSilent()) {
              this.level().levelEvent(null, 1048, this.blockPosition(), 0);
          }
++        // Paper start - Fix issues with mob conversion; reset conversion time to prevent event spam
++        if (stray == null) {
++            this.conversionTime = 300;
++        }
++        // Paper end - Fix issues with mob conversion
+     }
+ 
+     @Override

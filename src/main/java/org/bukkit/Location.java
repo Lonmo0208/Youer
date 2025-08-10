@@ -535,6 +535,59 @@ public class Location implements Cloneable, ConfigurationSerializable, io.paperm
 
     public boolean isChunkLoaded() { return this.getWorld().isChunkLoaded(locToBlock(x) >> 4, locToBlock(z) >> 4); } // Paper
 
+    // Paper start - expand location manipulation API
+
+    /**
+     * Sets the position of this Location and returns itself
+     * <p>
+     * This mutates this object, clone first.
+     *
+     * @param x X coordinate
+     * @param y Y coordinate
+     * @param z Z coordinate
+     * @return self (not cloned)
+     */
+    @NotNull
+    public Location set(double x, double y, double z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        return this;
+    }
+
+    /**
+     * Takes the x/y/z from base and adds the specified x/y/z to it and returns self
+     * <p>
+     * This mutates this object, clone first.
+     *
+     * @param base The base coordinate to modify
+     * @param x X coordinate to add to base
+     * @param y Y coordinate to add to base
+     * @param z Z coordinate to add to base
+     * @return self (not cloned)
+     */
+    @NotNull
+    public Location add(@NotNull Location base, double x, double y, double z) {
+        return this.set(base.x + x, base.y + y, base.z + z);
+    }
+
+    /**
+     * Takes the x/y/z from base and subtracts the specified x/y/z to it and returns self
+     * <p>
+     * This mutates this object, clone first.
+     *
+     * @param base The base coordinate to modify
+     * @param x X coordinate to subtract from base
+     * @param y Y coordinate to subtract from base
+     * @param z Z coordinate to subtract from base
+     * @return self (not cloned)
+     */
+    @NotNull
+    public Location subtract(@NotNull Location base, double x, double y, double z) {
+        return this.set(base.x - x, base.y - y, base.z - z);
+    }
+    // Paper end - expand location manipulation API
+
     // Paper start - expand Location API
     /**
      * @return A new location where X/Y/Z are on the Block location (integer value of X/Y/Z)
@@ -547,6 +600,18 @@ public class Location implements Cloneable, ConfigurationSerializable, io.paperm
         blockLoc.setZ(getBlockZ());
         return blockLoc;
     }
+
+    // Paper start
+    /**
+     * @return The block key for this location's block location.
+     * @see Block#getBlockKey(int, int, int)
+     * @deprecated only encodes y block ranges from -512 to 511 and represents an already changed implementation detail
+     */
+    @Deprecated(since = "1.18.1")
+    public long toBlockKey() {
+        return Block.getBlockKey(getBlockX(), getBlockY(), getBlockZ());
+    }
+    // Paper end
 
     /**
      * @return A new location where X/Y/Z are the center of the block
@@ -779,4 +844,28 @@ public class Location implements Cloneable, ConfigurationSerializable, io.paperm
         return new Location(world, this.x(), this.y(), this.z(), this.getYaw(), this.getPitch());
     }
     // Paper end
+
+    // Paper start - Add heightmap api
+    /**
+     * Returns a copy of this location except with y = getWorld().getHighestBlockYAt(this.getBlockX(), this.getBlockZ())
+     * @return A copy of this location except with y = getWorld().getHighestBlockYAt(this.getBlockX(), this.getBlockZ())
+     * @throws NullPointerException if {{@link #getWorld()}} is {@code null}
+     */
+    @NotNull
+    public Location toHighestLocation() {
+        return this.toHighestLocation(HeightMap.WORLD_SURFACE);
+    }
+
+    /**
+     * Returns a copy of this location except with y = getWorld().getHighestBlockYAt(this.getBlockX(), this.getBlockZ(), heightMap)
+     * @param heightMap The heightmap to use for finding the highest y location.
+     * @return A copy of this location except with y = getWorld().getHighestBlockYAt(this.getBlockX(), this.getBlockZ(), heightMap)
+     */
+    @NotNull
+    public Location toHighestLocation(@NotNull final HeightMap heightMap) {
+        final Location ret = this.clone();
+        ret.setY(this.getWorld().getHighestBlockYAt(this, heightMap));
+        return ret;
+    }
+    // Paper end - Add heightmap api
 }

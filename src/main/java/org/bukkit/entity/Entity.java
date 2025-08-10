@@ -837,6 +837,42 @@ public interface Entity extends Metadatable, CommandSender, Nameable, Persistent
      * @param sneak true if the entity should be sneaking
      */
     void setSneaking(boolean sneak);
+
+    /**
+     * Sets the entity's current {@link Pose}.
+     *
+     * <p>Note: While poses affect some things like hitboxes, they do not change the entity's state
+     * (e.g. having {@link Pose#SNEAKING} does not guarantee {@link #isSneaking()} being {@code true}).
+     *
+     * <p>If applied to the {@link Player}, they might see a different pose client-side.
+     *
+     * @param pose a new {@link Pose}
+     * @see #setPose(Pose, boolean)
+     */
+    default void setPose(@NotNull Pose pose) {
+        setPose(pose, false);
+    }
+
+    /**
+     * Sets the entity's current {@link Pose}.
+     *
+     * <p>Note: While poses affect some things like hitboxes, they do not change the entity's state
+     * (e.g. having {@link Pose#SNEAKING} does not guarantee {@link #isSneaking()} being {@code true}).
+     *
+     * <p>If applied to the {@link Player}, they might see a different pose client-side.
+     *
+     * @param pose a new {@link Pose}
+     * @param fixed whether the new {@link Pose} should stay until manually changed
+     */
+    void setPose(@NotNull Pose pose, boolean fixed);
+
+    /**
+     * Checks whether the entity has a fixed {@link Pose}
+     *
+     * @see #setPose(Pose, boolean)
+     * @return whether the entity has a fixed {@link Pose}
+     */
+    boolean hasFixedPose();
     // Paper end
 
     /**
@@ -1043,6 +1079,50 @@ public interface Entity extends Metadatable, CommandSender, Nameable, Persistent
      * @return Whether the entity was successfully spawned.
      */
     public boolean spawnAt(@NotNull Location location, @NotNull org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason reason);
+
+    /**
+     * Check if entity is inside powdered snow.
+     *
+     * @return true if in powdered snow.
+     */
+    boolean isInPowderedSnow();
+
+    /**
+     * Gets the x-coordinate of this entity
+     *
+     * @return x-coordinate
+     */
+    double getX();
+
+    /**
+     * Gets the y-coordinate of this entity
+     *
+     * @return y-coordinate
+     */
+    double getY();
+
+    /**
+     * Gets the z-coordinate of this entity
+     *
+     * @return z-coordinate
+     */
+    double getZ();
+
+    /**
+     * Gets this entity's pitch
+     *
+     * @see Location#getPitch()
+     * @return the entity's pitch
+     */
+    float getPitch();
+
+    /**
+     * Gets this entity's yaw
+     *
+     * @see Location#getYaw()
+     * @return the entity's yaw
+     */
+    float getYaw();
     // Paper end
 
     // Paper start - broadcast hurt animation
@@ -1068,4 +1148,26 @@ public interface Entity extends Metadatable, CommandSender, Nameable, Persistent
      */
     @NotNull String getScoreboardEntryName();
     // Paper end - entity scoreboard name
+
+    // Paper start - Collision API
+    /**
+     * Checks for any collisions with the entity's bounding box at the provided location.
+     * This will check for any colliding entities (boats, shulkers) / worldborder / blocks.
+     * Does not load chunks that are within the bounding box at the specified location.
+     *
+     * @param location the location to check collisions in
+     * @return collides or not
+     */
+    boolean collidesAt(@NotNull Location location);
+
+    /**
+     * This checks using the given boundingbox as the entity's boundingbox if the entity would collide with anything.
+     * This will check for any colliding entities (boats, shulkers) / worldborder / blocks.
+     * Does not load chunks that are within the bounding box.
+     *
+     * @param boundingBox the box to check collisions in
+     * @return collides or not
+     */
+    boolean wouldCollideUsing(@NotNull BoundingBox boundingBox);
+    // Paper end - Collision API
 }

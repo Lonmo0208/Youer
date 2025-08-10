@@ -53,6 +53,13 @@ public class CraftOfflinePlayer implements OfflinePlayer, ConfigurationSerializa
         return this.getPlayer() != null;
     }
 
+    // Paper start
+    @Override
+    public boolean isConnected() {
+        return false;
+    }
+    // Paper end
+
     @Override
     public String getName() {
         Player player = this.getPlayer();
@@ -114,17 +121,17 @@ public class CraftOfflinePlayer implements OfflinePlayer, ConfigurationSerializa
     }
 
     @Override
-    public BanEntry<PlayerProfile> ban(String reason, Date expires, String source) {
+    public BanEntry<io.papermc.paper.profile.PlayerProfile> ban(String reason, Date expires, String source) { // Paper - fix ban list API
         return ((ProfileBanList) this.server.getBanList(BanList.Type.PROFILE)).addBan(this.getPlayerProfile(), reason, expires, source);
     }
 
     @Override
-    public BanEntry<PlayerProfile> ban(String reason, Instant expires, String source) {
+    public BanEntry<io.papermc.paper.profile.PlayerProfile> ban(String reason, Instant expires, String source) { // Paper - fix ban list API
         return ((ProfileBanList) this.server.getBanList(BanList.Type.PROFILE)).addBan(this.getPlayerProfile(), reason, expires, source);
     }
 
     @Override
-    public BanEntry<PlayerProfile> ban(String reason, Duration duration, String source) {
+    public BanEntry<io.papermc.paper.profile.PlayerProfile> ban(String reason, Duration duration, String source) { // Paper - fix ban list API
         return ((ProfileBanList) this.server.getBanList(BanList.Type.PROFILE)).addBan(this.getPlayerProfile(), reason, duration, source);
     }
 

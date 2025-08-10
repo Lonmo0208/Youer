@@ -1987,6 +1987,25 @@ public final class CraftServer implements Server {
         return recipients.size();
     }
 
+    // Paper start
+    @Nullable
+    public UUID getPlayerUniqueId(String name) {
+        Player player = Bukkit.getPlayerExact(name);
+        if (player != null) {
+            return player.getUniqueId();
+        }
+        GameProfile profile;
+        // Only fetch an online UUID in online mode
+        if (io.papermc.paper.configuration.GlobalConfiguration.get().proxies.isProxyOnlineMode()) {
+            profile = console.getProfileCache().get(name).orElse(null);
+        } else {
+            // Make an OfflinePlayer using an offline mode UUID since the name has no profile
+            profile = new GameProfile(UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(Charsets.UTF_8)), name);
+        }
+        return profile != null ? profile.getId() : null;
+    }
+    // Paper end
+
     @Override
     @Deprecated
     public OfflinePlayer getOfflinePlayer(String name) {
@@ -2187,6 +2206,13 @@ public final class CraftServer implements Server {
     public ConsoleCommandSender getConsoleSender() {
         return this.console.console;
     }
+
+    // Paper start
+    @Override
+    public CommandSender createCommandSender(final java.util.function.Consumer<? super net.kyori.adventure.text.Component> feedback) {
+        return new io.papermc.paper.commands.FeedbackForwardingSender(feedback, this);
+    }
+    // Paper end
 
     public EntityMetadataStore getEntityMetadata() {
         return this.entityMetadata;
@@ -2793,6 +2819,15 @@ public final class CraftServer implements Server {
                     return (org.bukkit.Tag<T>) new CraftEntityTag(BuiltInRegistries.ENTITY_TYPE, entityTagKey);
                 }
             }
+            // Paper start
+            case org.bukkit.Tag.REGISTRY_GAME_EVENTS -> {
+                Preconditions.checkArgument(clazz == org.bukkit.GameEvent.class, "Game Event namespace must have GameEvent type");
+                TagKey<net.minecraft.world.level.gameevent.GameEvent> gameEventTagKey = TagKey.create(net.minecraft.core.registries.Registries.GAME_EVENT, key);
+                if (net.minecraft.core.registries.BuiltInRegistries.GAME_EVENT.getTag(gameEventTagKey).isPresent()) {
+                    return (org.bukkit.Tag<T>) new io.papermc.paper.CraftGameEventTag(net.minecraft.core.registries.BuiltInRegistries.GAME_EVENT, gameEventTagKey);
+                }
+            }
+            // Paper end
             default -> throw new IllegalArgumentException();
         }
 
@@ -2825,6 +2860,13 @@ public final class CraftServer implements Server {
                 net.minecraft.core.Registry<EntityType<?>> entityTags = BuiltInRegistries.ENTITY_TYPE;
                 return entityTags.getTags().map(pair -> (org.bukkit.Tag<T>) new CraftEntityTag(entityTags, pair.getFirst())).collect(ImmutableList.toImmutableList());
             }
+            // Paper start
+            case org.bukkit.Tag.REGISTRY_GAME_EVENTS -> {
+                Preconditions.checkArgument(clazz == org.bukkit.GameEvent.class);
+                net.minecraft.core.Registry<net.minecraft.world.level.gameevent.GameEvent> gameEvents = net.minecraft.core.registries.BuiltInRegistries.GAME_EVENT;
+                return gameEvents.getTags().map(pair -> (org.bukkit.Tag<T>) new io.papermc.paper.CraftGameEventTag(gameEvents, pair.getFirst())).collect(ImmutableList.toImmutableList());
+            }
+            // Paper end
             default -> throw new IllegalArgumentException();
         }
     }
