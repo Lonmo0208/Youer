@@ -67,7 +67,7 @@ public class NeoDevPlugin implements Plugin<Project> {
         var extension = project.getExtensions().create(NeoDevExtension.NAME, NeoDevExtension.class);
         var configurations = NeoDevConfigurations.createAndSetup(project);
 
-        var abbreviatedId = project.getProviders().gradleProperty("git.abbreviatedId");
+        //var abbreviatedId = project.getProviders().gradleProperty("git.abbreviatedId");
 
         /*
          * MINECRAFT SOURCES SETUP
@@ -243,7 +243,7 @@ public class NeoDevPlugin implements Plugin<Project> {
             task.manifest(manifest -> {
                 manifest.attributes(Map.of("FML-System-Mods", "neoforge"));
                 manifest.attributes(Map.of("Build-Time", timestamp));
-                manifest.attributes(Map.of("Git-Commit", abbreviatedId));
+                //manifest.attributes(Map.of("Git-Commit", abbreviatedId));
                 manifest.attributes(Map.of("Brand-Id", "mohistmc:youer"));
                 manifest.attributes(Map.of("Specification-Title", "Youer"));
                 manifest.attributes(Map.of("Specification-Vendor", "MohistMC"));
