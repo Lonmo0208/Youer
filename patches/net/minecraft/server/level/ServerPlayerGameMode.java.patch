@@ -15,26 +15,40 @@
  import net.minecraft.world.item.ItemStack;
  import net.minecraft.world.item.context.UseOnContext;
  import net.minecraft.world.item.enchantment.EnchantmentHelper;
-@@ -27,6 +_,7 @@
+@@ -27,6 +_,9 @@
  import net.minecraft.world.level.block.state.BlockState;
  import net.minecraft.world.phys.BlockHitResult;
  import net.minecraft.world.phys.Vec3;
++import org.bukkit.GameMode;
 +import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.player.PlayerGameModeChangeEvent;
  import org.slf4j.Logger;
  
  public class ServerPlayerGameMode {
-@@ -54,12 +_,19 @@
+@@ -51,28 +_,45 @@
+     }
+ 
+     public boolean changeGameModeForPlayer(GameType p_143474_) {
++        // Paper start - Expand PlayerGameModeChangeEvent
++        PlayerGameModeChangeEvent event = this.changeGameModeForPlayer(p_143474_, org.bukkit.event.player.PlayerGameModeChangeEvent.Cause.UNKNOWN, null);
++        return event != null && event.isCancelled();
++    }
++    @Nullable
++    public PlayerGameModeChangeEvent changeGameModeForPlayer(GameType p_143474_, org.bukkit.event.player.PlayerGameModeChangeEvent.Cause cause, @Nullable net.kyori.adventure.text.Component cancelMessage) {
++        // Paper end - Expand PlayerGameModeChangeEvent
          if (p_143474_ == this.gameModeForPlayer) {
-             return false;
+-            return false;
++            return null;
          } else {
+-            this.setGameModeForPlayer(p_143474_, this.previousGameModeForPlayer);
 +            // CraftBukkit start
-+            org.bukkit.event.player.PlayerGameModeChangeEvent event = new org.bukkit.event.player.PlayerGameModeChangeEvent(player.getBukkitEntity(), org.bukkit.GameMode.getByValue(p_143474_.getId()));
-+            level.getCraftServer().getPluginManager().callEvent(event);
++            PlayerGameModeChangeEvent event = new PlayerGameModeChangeEvent(this.player.getBukkitEntity(), GameMode.getByValue(p_143474_.getId()), cause, cancelMessage); // Paper
++            this.level.getCraftServer().getPluginManager().callEvent(event);
 +            if (event.isCancelled()) {
-+                return false;
++                return event; // Paper - Expand PlayerGameModeChangeEvent
 +            }
 +            // CraftBukkit end
-             this.setGameModeForPlayer(p_143474_, this.previousGameModeForPlayer);
++            this.setGameModeForPlayer(p_143474_, this.gameModeForPlayer);
              this.player.onUpdateAbilities();
              this.player
                  .server
@@ -44,7 +58,13 @@
              this.level.updateSleepingPlayerList();
              if (p_143474_ == GameType.CREATIVE) {
                  this.player.resetCurrentImpulseContext();
-@@ -72,7 +_,10 @@
+             }
+ 
+-            return true;
++            return event; // Paper - Expand PlayerGameModeChangeEvent
+         }
+     }
+ 
      protected void setGameModeForPlayer(GameType p_9274_, @Nullable GameType p_9275_) {
          this.previousGameModeForPlayer = p_9275_;
          this.gameModeForPlayer = p_9274_;
@@ -60,7 +80,7 @@
  
      public void tick() {
 -        this.gameTicks++;
-+        this.gameTicks = net.minecraft.server.MinecraftServer.currentTick; // CraftBukkit;
++        this.gameTicks = (int)this.level.getLagCompensationTick(); // CraftBukkit; // Paper - lag compensation
          if (this.hasDelayedDestroy) {
              BlockState blockstate = this.level.getBlockState(this.delayedDestroyPos);
              if (blockstate.isAir()) {
@@ -75,7 +95,7 @@
          if (!this.player.canInteractWithBlock(p_215120_, 1.0)) {
              this.debugLogging(p_215120_, false, p_215124_, "too far");
          } else if (p_215120_.getY() >= p_215123_) {
-@@ -141,16 +_,46 @@
+@@ -141,16 +_,45 @@
          } else {
              if (p_215121_ == ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK) {
                  if (!this.level.mayInteract(this.player, p_215120_)) {
@@ -116,7 +136,6 @@
 +                // Spigot start - handle debug stick left click for non-creative
 +                if (this.player.getMainHandItem().is(net.minecraft.world.item.Items.DEBUG_STICK)
 +                        && ((net.minecraft.world.item.DebugStickItem) net.minecraft.world.item.Items.DEBUG_STICK).handleInteractionSpigot(this.player, this.level.getBlockState(p_215120_), this.level, p_215120_, false, this.player.getMainHandItem())) {
-+                    this.player.connection.send(new ClientboundBlockUpdatePacket(this.level, p_215120_));
 +                    return;
 +                }
 +                // Spigot end
@@ -124,28 +143,19 @@
                  if (this.player.blockActionRestricted(this.level, p_215120_, this.gameModeForPlayer)) {
                      this.player.connection.send(new ClientboundBlockUpdatePacket(p_215120_, this.level.getBlockState(p_215120_)));
                      this.debugLogging(p_215120_, false, p_215124_, "block action restricted");
-@@ -160,7 +_,19 @@
+@@ -160,7 +_,10 @@
                  this.destroyProgressStart = this.gameTicks;
                  float f = 1.0F;
                  BlockState blockstate = this.level.getBlockState(p_215120_);
 -                if (!blockstate.isAir()) {
 +                // CraftBukkit start - Swings at air do *NOT* exist.
 +                if (eventCB.useInteractedBlock() == org.bukkit.event.Event.Result.DENY) {
-+                    // If we denied a door from opening, we need to send a correcting update to the client, as it already opened the door.
-+                    BlockState data = this.level.getBlockState(p_215120_);
-+                    if (data.getBlock() instanceof net.minecraft.world.level.block.DoorBlock) {
-+                        // For some reason *BOTH* the bottom/top part have to be marked updated.
-+                        boolean bottom = data.getValue(net.minecraft.world.level.block.DoorBlock.HALF) == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER;
-+                        this.player.connection.send(new ClientboundBlockUpdatePacket(this.level, p_215120_));
-+                        this.player.connection.send(new ClientboundBlockUpdatePacket(this.level, bottom ? p_215120_.above() : p_215120_.below()));
-+                    } else if (data.getBlock() instanceof net.minecraft.world.level.block.TrapDoorBlock) {
-+                        this.player.connection.send(new ClientboundBlockUpdatePacket(this.level, p_215120_));
-+                    }
++                    // Paper - Don't resync blocks
 +                } else if (!blockstate.isAir()) {
                      EnchantmentHelper.onHitBlock(
                          this.level,
                          this.player.getMainHandItem(),
-@@ -171,10 +_,30 @@
+@@ -171,10 +_,25 @@
                          blockstate,
                          p_348149_ -> this.player.onEquippedItemBroken(p_348149_, EquipmentSlot.MAINHAND)
                      );
@@ -155,16 +165,11 @@
                  }
  
 +                if (eventCB.useItemInHand() == org.bukkit.event.Event.Result.DENY) {
-+                    // If we 'insta destroyed' then the client needs to be informed.
-+                    if (f > 1.0f) {
-+                        this.player.connection.send(new ClientboundBlockUpdatePacket(this.level, p_215120_));
-+                    }
 +                    return;
 +                }
 +                org.bukkit.event.block.BlockDamageEvent blockEvent = CraftEventFactory.callBlockDamageEvent(this.player, p_215120_, p_215122_, this.player.getInventory().getSelected(), f >= 1.0f);
 +                if (blockEvent.isCancelled()) {
 +                    // Let the client know the block still exists
-+                    this.player.connection.send(new ClientboundBlockUpdatePacket(this.level, p_215120_));
 +                    return;
 +                }
 +
@@ -193,7 +198,7 @@
              }
          }
      }
-@@ -238,7 +_,8 @@
+@@ -238,38 +_,58 @@
  
      public boolean destroyBlock(BlockPos p_9281_) {
          BlockState blockstate1 = this.level.getBlockState(p_9281_);
@@ -203,7 +208,12 @@
              return false;
          } else {
              BlockEntity blockentity = this.level.getBlockEntity(p_9281_);
-@@ -250,26 +_,45 @@
+             Block block = blockstate1.getBlock();
+-            if (block instanceof GameMasterBlock && !this.player.canUseGameMasterBlocks()) {
++            if (block instanceof GameMasterBlock && !this.player.canUseGameMasterBlocks() && !(block instanceof net.minecraft.world.level.block.CommandBlock && (this.player.isCreative() && this.player.getBukkitEntity().hasPermission("minecraft.commandblock")))) { // Paper - command block permission
+                 this.level.sendBlockUpdated(p_9281_, blockstate1, blockstate1, 3);
+                 return false;
+             } else if (this.player.blockActionRestricted(this.level, p_9281_, this.gameModeForPlayer)) {
                  return false;
              } else {
                  BlockState blockstate = block.playerWillDestroy(this.level, p_9281_, blockstate1, this.player);

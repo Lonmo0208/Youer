@@ -64,7 +64,7 @@ public class ItemStackFactory {
         return this;
     }
 
-    public ItemStackFactory addLore(String name) {
+    public ItemStackFactory addLore(String lore) {
         ItemMeta im = this.item.getItemMeta();
         List<String> lores;
         if (im.hasLore()) {
@@ -72,8 +72,15 @@ public class ItemStackFactory {
         } else {
             lores = new ArrayList<>();
         }
-        lores.add(name.replaceAll("&", "§"));
+        lores.add(lore.replaceAll("&", "§"));
         im.setLore(lores);
+        this.item.setItemMeta(im);
+        return this;
+    }
+
+    public ItemStackFactory setCustomModelData(int customModelData) {
+        ItemMeta im = this.item.getItemMeta();
+        im.setCustomModelData(customModelData);
         this.item.setItemMeta(im);
         return this;
     }

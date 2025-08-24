@@ -37,6 +37,7 @@ import org.bukkit.profile.PlayerProfile;
 
 @SerializableAs("Player")
 public class CraftOfflinePlayer implements OfflinePlayer, ConfigurationSerializable {
+    private static final org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger(); // Paper
     private final GameProfile profile;
     private final CraftServer server;
     private final PlayerDataStorage storage;
@@ -396,11 +397,20 @@ public class CraftOfflinePlayer implements OfflinePlayer, ConfigurationSerializa
         if (data == null) return null;
 
         if (data.contains("SpawnX") && data.contains("SpawnY") && data.contains("SpawnZ")) {
-            String spawnWorld = data.getString("SpawnWorld");
-            if (spawnWorld.equals("")) {
-                spawnWorld = this.server.getWorlds().get(0).getName();
+            // Paper start - fix wrong world
+            final float respawnAngle = data.getFloat("SpawnAngle");
+            org.bukkit.World spawnWorld = this.server.getWorld(data.getString("SpawnWorld")); // legacy
+            if (data.contains("SpawnDimension")) {
+                com.mojang.serialization.DataResult<net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>> result = net.minecraft.world.level.Level.RESOURCE_KEY_CODEC.parse(net.minecraft.nbt.NbtOps.INSTANCE, data.get("SpawnDimension"));
+                net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> levelKey = result.resultOrPartial(LOGGER::error).orElse(net.minecraft.world.level.Level.OVERWORLD);
+                net.minecraft.server.level.ServerLevel level = this.server.console.getLevel(levelKey);
+                spawnWorld = level != null ? level.getWorld() : spawnWorld;
             }
-            return new Location(this.server.getWorld(spawnWorld), data.getInt("SpawnX"), data.getInt("SpawnY"), data.getInt("SpawnZ"));
+            if (spawnWorld == null) {
+                return null;
+            }
+            return new Location(spawnWorld, data.getInt("SpawnX"), data.getInt("SpawnY"), data.getInt("SpawnZ"), respawnAngle, 0);
+            // Paper end
         }
         return null;
     }
@@ -616,4 +626,191 @@ public class CraftOfflinePlayer implements OfflinePlayer, ConfigurationSerializa
             manager.save();
         }
     }
+
+    // Purpur start - OfflinePlayer API
+    @Override
+    public boolean getAllowFlight() {
+        if (this.isOnline()) {
+            return this.getPlayer().getAllowFlight();
+        } else {
+            CompoundTag data = this.getData();
+            if (data == null) return false;
+            if (!data.contains("abilities")) return false;
+            CompoundTag abilities = data.getCompound("abilities");
+            return abilities.getByte("mayfly") == (byte) 1;
+        }
+    }
+
+    @Override
+    public void setAllowFlight(boolean flight) {
+        if (this.isOnline()) {
+            this.getPlayer().setAllowFlight(flight);
+        } else {
+            CompoundTag data = this.getData();
+            if (data == null) return;
+            if (!data.contains("abilities")) return;
+            CompoundTag abilities = data.getCompound("abilities");
+            abilities.putByte("mayfly", (byte) (flight ? 1 : 0));
+            data.put("abilities", abilities);
+            save(data);
+        }
+    }
+
+    @Override
+    public boolean isFlying() {
+        if (this.isOnline()) {
+            return this.isFlying();
+        } else {
+            CompoundTag data = this.getData();
+            if (data == null) return false;
+            if (!data.contains("abilities")) return false;
+            CompoundTag abilities = data.getCompound("abilities");
+            return abilities.getByte("flying") == (byte) 1;
+        }
+    }
+
+    @Override
+    public void setFlying(boolean value) {
+        if (this.isOnline()) {
+            this.getPlayer().setFlying(value);
+        } else {
+            CompoundTag data = this.getData();
+            if (data == null) return;
+            if (!data.contains("abilities")) return;
+            CompoundTag abilities = data.getCompound("abilities");
+            abilities.putByte("mayfly", (byte) (value ? 1 : 0));
+            data.put("abilities", abilities);
+            save(data);
+        }
+    }
+
+    @Override
+    public void setFlySpeed(float value) throws IllegalArgumentException {
+        if (value < -1f || value > 1f) throw new IllegalArgumentException("FlySpeed needs to be between -1 and 1");
+        if (this.isOnline()) {
+            this.getPlayer().setFlySpeed(value);
+        } else {
+            CompoundTag data = this.getData();
+            if (data == null) return;
+            if (!data.contains("abilities")) return;
+            CompoundTag abilities = data.getCompound("abilities");
+            abilities.putFloat("flySpeed", value);
+            data.put("abilities", abilities);
+            save(data);
+        }
+    }
+
+    @Override
+    public float getFlySpeed() {
+        if (this.isOnline()) {
+            return this.getPlayer().getFlySpeed();
+        } else {
+            CompoundTag data = this.getData();
+            if (data == null) return 0;
+            if (!data.contains("abilities")) return 0;
+            CompoundTag abilities = data.getCompound("abilities");
+            return abilities.getFloat("flySpeed");
+        }
+    }
+
+    @Override
+    public void setWalkSpeed(float value) throws IllegalArgumentException {
+        if (value < -1f || value > 1f) throw new IllegalArgumentException("WalkSpeed needs to be between -1 and 1");
+        if (this.isOnline()) {
+            this.getPlayer().setWalkSpeed(value);
+        } else {
+            CompoundTag data = this.getData();
+            if (data == null) return;
+            if (!data.contains("abilities")) return;
+            CompoundTag abilities = data.getCompound("abilities");
+            abilities.putFloat("walkSpeed", value);
+            data.put("abilities", abilities);
+            save(data);
+        }
+    }
+
+    @Override
+    public float getWalkSpeed() {
+        if (this.isOnline()) {
+            return this.getPlayer().getWalkSpeed();
+        } else {
+            CompoundTag data = this.getData();
+            if (data == null) return 0;
+            if (!data.contains("abilities")) return 0;
+            CompoundTag abilities = data.getCompound("abilities");
+            return abilities.getFloat("walkSpeed");
+        }
+    }
+
+    @Override
+    public boolean teleportOffline(Location destination) {
+        if (this.isOnline()) {
+            return this.getPlayer().teleport(destination);
+        } else {
+            return setLocation(destination);
+        }
+    }
+
+    @Override
+    public boolean teleportOffline(Location destination, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause){
+        if (this.isOnline()) {
+            return this.getPlayer().teleport(destination, cause);
+        } else {
+            return setLocation(destination);
+        }
+    }
+
+    @Override
+    public java.util.concurrent.CompletableFuture<Boolean> teleportOfflineAsync(Location destination) {
+        if (this.isOnline()) {
+            return this.getPlayer().teleportAsync(destination);
+        } else {
+            return java.util.concurrent.CompletableFuture.completedFuture(setLocation(destination));
+        }
+    }
+
+    @Override
+    public java.util.concurrent.CompletableFuture<Boolean> teleportOfflineAsync(Location destination, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause) {
+        if (this.isOnline()) {
+            return this.getPlayer().teleportAsync(destination, cause);
+        } else {
+            return java.util.concurrent.CompletableFuture.completedFuture(setLocation(destination));
+        }
+    }
+
+    private boolean setLocation(Location location) {
+        CompoundTag data = this.getData();
+        if (data == null) return false;
+        data.putLong("WorldUUIDMost", location.getWorld().getUID().getMostSignificantBits());
+        data.putLong("WorldUUIDLeast", location.getWorld().getUID().getLeastSignificantBits());
+        net.minecraft.nbt.ListTag position = new net.minecraft.nbt.ListTag();
+        position.add(net.minecraft.nbt.DoubleTag.valueOf(location.getX()));
+        position.add(net.minecraft.nbt.DoubleTag.valueOf(location.getY()));
+        position.add(net.minecraft.nbt.DoubleTag.valueOf(location.getZ()));
+        data.put("Pos", position);
+        net.minecraft.nbt.ListTag rotation = new net.minecraft.nbt.ListTag();
+        rotation.add(net.minecraft.nbt.FloatTag.valueOf(location.getYaw()));
+        rotation.add(net.minecraft.nbt.FloatTag.valueOf(location.getPitch()));
+        data.put("Rotation", rotation);
+        save(data);
+        return true;
+    }
+
+    /**
+     * Safely replaces player's .dat file with provided CompoundTag
+     * @param compoundTag
+     */
+    private void save(CompoundTag compoundTag) {
+        File playerDir = server.console.playerDataStorage.getPlayerDir();
+        try {
+            File tempFile = File.createTempFile(this.getUniqueId()+"-", ".dat", playerDir);
+            net.minecraft.nbt.NbtIo.writeCompressed(compoundTag, tempFile.toPath());
+            File playerDataFile = new File(playerDir, this.getUniqueId()+".dat");
+            File playerDataFileOld = new File(playerDir, this.getUniqueId()+".dat_old");
+            net.minecraft.Util.safeReplaceFile(playerDataFile.toPath(), tempFile.toPath(), playerDataFileOld.toPath());
+        } catch (java.io.IOException e) {
+            e.printStackTrace();
+        }
+    }
+    // Purpur end - OfflinePlayer API
 }

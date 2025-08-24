@@ -1,12 +1,31 @@
 --- a/net/minecraft/world/entity/monster/Husk.java
 +++ b/net/minecraft/world/entity/monster/Husk.java
-@@ -28,7 +_,7 @@
+@@ -18,6 +_,7 @@
+ public class Husk extends Zombie {
+     public Husk(EntityType<? extends Husk> p_32889_, Level p_32890_) {
+         super(p_32889_, p_32890_);
++        this.setShouldBurnInDay(false); // Purpur - API for any mob to burn daylight
+     }
+ 
+     public static boolean checkHuskSpawnRules(
+@@ -28,8 +_,8 @@
      }
  
      @Override
 -    protected boolean isSunSensitive() {
+-        return false;
 +    public boolean isSunSensitive() {
-         return false;
++        return this.shouldBurnInDay; // Purpur - moved to LivingEntity; keep methods for ABI compatibility - API for any mob to burn daylight
+     }
+ 
+     @Override
+@@ -43,7 +_,7 @@
+     }
+ 
+     @Override
+-    protected SoundEvent getDeathSound() {
++    public SoundEvent getDeathSound() {
+         return SoundEvents.HUSK_DEATH;
      }
  
 @@ -57,7 +_,7 @@

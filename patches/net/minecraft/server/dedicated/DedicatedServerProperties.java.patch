@@ -9,7 +9,7 @@
  import net.minecraft.core.Holder;
  import net.minecraft.core.Registry;
  import net.minecraft.core.RegistryAccess;
-@@ -45,7 +_,7 @@
+@@ -45,9 +_,10 @@
      static final Logger LOGGER = LogUtils.getLogger();
      private static final Pattern SHA1 = Pattern.compile("^[a-fA-F0-9]{40}$");
      private static final Splitter COMMA_SPLITTER = Splitter.on(',').trimResults();
@@ -17,23 +17,43 @@
 +    public final boolean onlineMode = this.get("online-mode", !net.minecraft.SharedConstants.IS_RUNNING_IN_IDE);
      public final boolean preventProxyConnections = this.get("prevent-proxy-connections", false);
      public final String serverIp = this.get("server-ip", "");
++    public final String serverName = this.get("server-name", "Unknown Server"); // Purpur
      public final boolean spawnAnimals = this.get("spawn-animals", true);
-@@ -103,6 +_,7 @@
+     public final boolean spawnNpcs = this.get("spawn-npcs", true);
+     public final boolean pvp = this.get("pvp", true);
+@@ -87,7 +_,7 @@
+     public final boolean broadcastRconToOps = this.get("broadcast-rcon-to-ops", true);
+     public final boolean broadcastConsoleToOps = this.get("broadcast-console-to-ops", true);
+     public final int maxWorldSize = this.get("max-world-size", p_139771_ -> Mth.clamp(p_139771_, 1, 29999984), 29999984);
+-    public final boolean syncChunkWrites = this.get("sync-chunk-writes", true);
++    public final boolean syncChunkWrites = this.get("sync-chunk-writes", true) && Boolean.getBoolean("Paper.enable-sync-chunk-writes"); // Paper - Hide sync chunk writes behind flag
+     public final String regionFileComression = this.get("region-file-compression", "deflate");
+     public final boolean enableJmxMonitoring = this.get("enable-jmx-monitoring", false);
+     public final boolean enableStatus = this.get("enable-status", true);
+@@ -103,7 +_,8 @@
      private final DedicatedServerProperties.WorldDimensionData worldDimensionData;
      public final WorldOptions worldOptions;
      public boolean acceptsTransfers = this.get("accepts-transfers", false);
+-
 +    public final boolean debug = this.get("debug", false); // CraftBukkit
- 
++    public final String rconIp; // Paper - Configurable rcon ip
      public DedicatedServerProperties(Properties p_180926_) {
          super(p_180926_);
-@@ -128,8 +_,20 @@
+         String s = this.get("level-seed", "");
+@@ -126,10 +_,26 @@
+             this.get("initial-enabled-packs", String.join(",", WorldDataConfiguration.DEFAULT.dataPacks().getEnabled())),
+             this.get("initial-disabled-packs", String.join(",", WorldDataConfiguration.DEFAULT.dataPacks().getDisabled()))
          );
-     }
- 
-+    public DedicatedServerProperties(Properties properties, OptionSet optionset) {
-+        this(properties);
++        // Paper start - Configurable rcon ip
++        final String rconIp = this.getStringRaw("rcon.ip");
++        this.rconIp = rconIp == null ? this.serverIp : rconIp;
++        // Paper end - Configurable rcon ip
 +    }
 +
++    public DedicatedServerProperties(Properties properties, OptionSet optionset) {
++        this(properties);
+     }
+ 
      public static DedicatedServerProperties fromFile(Path p_180930_) {
          return new DedicatedServerProperties(loadFromFile(p_180930_));
 +    }

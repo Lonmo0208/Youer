@@ -223,8 +223,12 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
 
     @Override
     public void remove() {
-        // Will lead to an inconsistent player state if we remove the player as any other entity.
-        throw new UnsupportedOperationException(String.format("Cannot remove player %s, use Player#kickPlayer(String) instead.", this.getName()));
+        if (this.getHandle().getClass().equals(ServerPlayer.class)) { // special case for NMS plugins inheriting
+            // Will lead to an inconsistent player state if we remove the player as any other entity.
+            throw new UnsupportedOperationException(String.format("Cannot remove player %s, use Player#kickPlayer(String) instead.", this.getName()));
+        } else {
+            super.remove();
+        }
     }
 
     @Override
@@ -378,8 +382,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
 
     @Override
     public void sendRawMessage(UUID sender, String message) {
-        Preconditions.checkArgument(message != null, "message cannot be null");
-
+        if (message == null) message = "";
         if (this.getHandle().connection == null) return;
 
         for (Component component : CraftChatMessage.fromString(message)) {
@@ -572,10 +575,15 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
 
     @Override
     public void setPlayerListName(String name) {
+        // Purpur start
+        setPlayerListName(name, false);
+    }
+    public void setPlayerListName(String name, boolean useMM) {
+        // Purpur end
         if (name == null) {
             name = this.getName();
         }
-        this.getHandle().setTabListDisplayName(name.equals(this.getName()) ? null : CraftChatMessage.fromStringOrNull(name));
+        this.getHandle().setTabListDisplayName(name.equals(this.getName()) ? null : useMM ? io.papermc.paper.adventure.PaperAdventure.asVanilla(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(name)) : CraftChatMessage.fromStringOrNull(name)); // Purpur
         if (this.getHandle().connection == null) return; // Paper - Updates are possible before the player has fully joined
         for (ServerPlayer player : (List<ServerPlayer>) this.server.getHandle().players) {
             if (player.getBukkitEntity().canSee(this)) {
@@ -669,6 +677,29 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
             connection.disconnect(message == null ? net.kyori.adventure.text.Component.empty() : message, cause);
         }
     }
+
+    @Override
+    public <T> T getClientOption(io.papermc.paper.ClientOption<T> type) {
+        if (io.papermc.paper.ClientOption.SKIN_PARTS == type) {
+            return type.getType().cast(new io.papermc.paper.PaperSkinParts(getHandle().getEntityData().get(net.minecraft.world.entity.player.Player.DATA_PLAYER_MODE_CUSTOMISATION)));
+        } else if (io.papermc.paper.ClientOption.CHAT_COLORS_ENABLED == type) {
+            return type.getType().cast(getHandle().canChatInColor());
+        } else if (io.papermc.paper.ClientOption.CHAT_VISIBILITY == type) {
+            return type.getType().cast(getHandle().getChatVisibility() == null ? io.papermc.paper.ClientOption.ChatVisibility.UNKNOWN : io.papermc.paper.ClientOption.ChatVisibility.valueOf(getHandle().getChatVisibility().name()));
+        } else if (io.papermc.paper.ClientOption.LOCALE == type) {
+            return type.getType().cast(getLocale());
+        } else if (io.papermc.paper.ClientOption.MAIN_HAND == type) {
+            return type.getType().cast(getMainHand());
+        } else if (io.papermc.paper.ClientOption.VIEW_DISTANCE == type) {
+            return type.getType().cast(getClientViewDistance());
+        } else if (io.papermc.paper.ClientOption.ALLOW_SERVER_LISTINGS == type) {
+            return type.getType().cast(getHandle().allowsListing());
+        } else if (io.papermc.paper.ClientOption.TEXT_FILTERING_ENABLED == type) {
+            return type.getType().cast(getHandle().isTextFilteringEnabled());
+        }
+        throw new RuntimeException("Unknown settings type");
+    }
+    // Paper end
 
     // Paper start - Add sendOpLevel API
     @Override
@@ -1814,7 +1845,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         Preconditions.checkArgument(mode != null, "GameMode cannot be null");
         if (this.getHandle().connection == null) return;
 
-        this.getHandle().setGameMode(GameType.byId(mode.getValue()));
+        this.getHandle().setGameMode(GameType.byId(mode.getValue()), org.bukkit.event.player.PlayerGameModeChangeEvent.Cause.PLUGIN, null); // Paper - Expand PlayerGameModeChangeEvent
     }
 
     @Override
@@ -2707,6 +2738,28 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         return this.getHandle().getAbilities().walkingSpeed * 2f;
     }
 
+    // Purpur start - OfflinePlayer API
+    @Override
+    public boolean teleportOffline(@NotNull Location destination) {
+        return this.teleport(destination);
+    }
+
+    @Override
+    public boolean teleportOffline(Location destination, PlayerTeleportEvent.TeleportCause cause) {
+        return this.teleport(destination, cause);
+    }
+
+    @Override
+    public java.util.concurrent.CompletableFuture<Boolean> teleportOfflineAsync(@NotNull Location destination) {
+        return this.teleportAsync(destination);
+    }
+
+    @Override
+    public java.util.concurrent.CompletableFuture<Boolean> teleportOfflineAsync(@NotNull Location destination, PlayerTeleportEvent.TeleportCause cause) {
+        return this.teleportAsync(destination, cause);
+    }
+    // Purpur end - OfflinePlayer API
+
     private void validateSpeed(float value) {
         Preconditions.checkArgument(value <= 1f && value >= -1f, "Speed value (%s) need to be between -1f and 1f", value);
     }
@@ -2806,7 +2859,14 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override
     public void sendHealthUpdate() {
         FoodData foodData = this.getHandle().getFoodData();
-        this.sendHealthUpdate(this.getScaledHealth(), foodData.getFoodLevel(), foodData.getSaturationLevel());
+        // Paper start - cancellable death event
+        ClientboundSetHealthPacket packet = new ClientboundSetHealthPacket(this.getScaledHealth(), foodData.getFoodLevel(), foodData.getSaturationLevel());
+        if (this.getHandle().queueHealthUpdatePacket) {
+            this.getHandle().queuedHealthUpdatePacket = packet;
+        } else {
+            this.getHandle().connection.send(packet);
+        }
+        // Paper end
     }
 
     public void injectScaledMaxHealth(Collection<AttributeInstance> collection, boolean force) {
@@ -3274,6 +3334,21 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
 
         return this.adventure$pointers;
     }
+
+    @Override
+    public float getCooldownPeriod() {
+        return getHandle().getCurrentItemAttackStrengthDelay();
+    }
+
+    @Override
+    public float getCooledAttackStrength(float adjustTicks) {
+        return getHandle().getAttackStrengthScale(adjustTicks);
+    }
+
+    @Override
+    public void resetCooldown() {
+        getHandle().resetAttackStrengthTicker();
+    }
     // Paper end
     // Spigot start
     private final Player.Spigot spigot = new Player.Spigot()
@@ -3364,6 +3439,42 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         if (getHandle().connection != null) getHandle().connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.GUARDIAN_ELDER_EFFECT, silent ? 0F : 1F));
     }
 
+    @Override
+    public int getWardenWarningCooldown() {
+        return this.getHandle().wardenSpawnTracker.cooldownTicks;
+    }
+
+    @Override
+    public void setWardenWarningCooldown(int cooldown) {
+        this.getHandle().wardenSpawnTracker.cooldownTicks = Math.max(cooldown, 0);
+    }
+
+    @Override
+    public int getWardenTimeSinceLastWarning() {
+        return this.getHandle().wardenSpawnTracker.ticksSinceLastWarning;
+    }
+
+    @Override
+    public void setWardenTimeSinceLastWarning(int time) {
+        this.getHandle().wardenSpawnTracker.ticksSinceLastWarning = time;
+    }
+
+    @Override
+    public int getWardenWarningLevel() {
+        return this.getHandle().wardenSpawnTracker.getWarningLevel();
+    }
+
+    @Override
+    public void setWardenWarningLevel(int warningLevel) {
+        this.getHandle().wardenSpawnTracker.setWarningLevel(warningLevel);
+    }
+
+    @Override
+    public void increaseWardenWarningLevel() {
+        this.getHandle().wardenSpawnTracker.increaseWarningLevel();
+    }
+    // Paper end
+
     // Paper start - brand support
     @Override
     public String getClientBrandName() {
@@ -3438,4 +3549,70 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         this.getHandle().resetLastActionTime();
     }
     // Paper end
+
+    // Purpur start
+    @Override
+    public boolean usesPurpurClient() {
+        return getHandle().purpurClient;
+    }
+
+    @Override
+    public boolean isAfk() {
+        return getHandle().isAfk();
+    }
+
+    @Override
+    public void setAfk(boolean setAfk) {
+        getHandle().setAfk(setAfk);
+    }
+
+    @Override
+    public void resetIdleTimer() {
+        getHandle().resetLastActionTime();
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration) {
+        sendBlockHighlight(location, duration, "", 0x6400FF00);
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, int argb) {
+        sendBlockHighlight(location, duration, "", argb);
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, String text) {
+        sendBlockHighlight(location, duration, text, 0x6400FF00);
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, String text, int argb) {
+        if (this.getHandle().connection == null) return;
+        this.getHandle().connection.send(new net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket(new net.minecraft.network.protocol.common.custom.GameTestAddMarkerDebugPayload(io.papermc.paper.util.MCUtil.toBlockPosition(location), argb, text, duration)));
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, org.bukkit.Color color, int transparency) {
+        sendBlockHighlight(location, duration, "", color, transparency);
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, String text, org.bukkit.Color color, int transparency) {
+        if (transparency < 0 || transparency > 255) throw new IllegalArgumentException("transparency is outside of 0-255 range");
+        sendBlockHighlight(location, duration, text, transparency << 24 | color.asRGB());
+    }
+
+    @Override
+    public void clearBlockHighlights() {
+        if (this.getHandle().connection == null) return;
+        this.getHandle().connection.send(new net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket(new net.minecraft.network.protocol.common.custom.GameTestClearMarkersDebugPayload()));
+    }
+
+    @Override
+    public void sendDeathScreen(net.kyori.adventure.text.Component message) {
+        if (this.getHandle().connection == null) return;
+        this.getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundPlayerCombatKillPacket(getEntityId(), io.papermc.paper.adventure.PaperAdventure.asVanilla(message)));
+    }
+    // Purpur end
 }

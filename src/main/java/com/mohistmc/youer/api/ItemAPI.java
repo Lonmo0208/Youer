@@ -12,10 +12,13 @@ import java.util.List;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.item.SpawnEggItem;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.bukkit.Material;
@@ -31,16 +34,6 @@ import org.bukkit.util.io.BukkitObjectOutputStream;
 public class ItemAPI {
 
     public static final Logger LOGGER = LogManager.getLogger("ItemAPI");
-
-    public static ItemStack doItem(Material material, int menge, String name, List<String> lore, Integer customModelData) {
-        ItemStack item = new ItemStack(material, menge);
-        ItemMeta meta = item.getItemMeta();
-        meta.setLore(lore);
-        meta.setDisplayName(name);
-        if (customModelData != null) meta.setCustomModelData(customModelData);
-        item.setItemMeta(meta);
-        return item;
-    }
 
     public static net.minecraft.world.item.ItemStack toNMSItem(Material material) {
         ItemStack itemStack = new ItemStack(material);
@@ -121,7 +114,7 @@ public class ItemAPI {
         return null;
     }
 
-    public static byte[] nbtToByte(CompoundTag nbt){
+    public static byte[] nbtToByte(CompoundTag nbt) {
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             DataOutputStream dos = new DataOutputStream(baos);
@@ -181,19 +174,24 @@ public class ItemAPI {
         return BanConfig.ITEM.getItem().contains(itemStack.getType().getKey().asString());
     }
 
-    public static Material getEggMaterial(EntityType entitytype) {
+    public static Material getEggMaterial(net.minecraft.world.entity.EntityType<?> entitytype) {
         try {
-            if (entitytype == EntityType.PLAYER) {
+            if (entitytype == net.minecraft.world.entity.EntityType.PLAYER) {
                 return Material.PLAYER_HEAD;
             }
-            String getMaterial = entitytype + "_SPAWN_EGG";
-            return Material.valueOf(entitytype.toString().equals("MUSHROOM_COW") ? "MOOSHROOM_SPAWN_EGG" : getMaterial);
-        } catch (Exception e) {
-            try {
-                return Material.valueOf(entitytype.getName().toUpperCase());
-            } catch (Exception e1) {
-                return Material.SPAWNER;
+            var getMaterial = SpawnEggItem.byId(entitytype);
+            if (getMaterial != null) {
+                return getMaterial.getDefaultInstance().getBukkitStack().getType();
+            } else {
+                var key = net.minecraft.world.entity.EntityType.getKey(entitytype);
+                if (BuiltInRegistries.ITEM.get(key) == null) {
+                    return Material.SPAWNER;
+                }
+                Material material = get(key);
+                return material.isAir() ? Material.SPAWNER : material;
             }
+        } catch (Exception e) {
+            return Material.SPAWNER;
         }
     }
 
@@ -219,5 +217,9 @@ public class ItemAPI {
         } catch (Exception e) {
             return getEnchantmentByName(key);
         }
+    }
+
+    public static Material get(ResourceLocation key) {
+        return BuiltInRegistries.ITEM.get(key).getDefaultInstance().asBukkitCopy().getType();
     }
 }

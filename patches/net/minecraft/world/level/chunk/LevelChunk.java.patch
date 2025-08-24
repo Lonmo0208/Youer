@@ -68,6 +68,20 @@
  
      @Override
      public TickContainerAccess<Block> getBlockTicks() {
+@@ -165,6 +_,13 @@
+         return new ChunkAccess.TicksToSave(this.blockTicks, this.fluidTicks);
+     }
+ 
++    // Paper start
++    @Override
++    public long getInhabitedTime() {
++        return this.level.paperConfig().chunks.fixedChunkInhabitedTime < 0 ? super.getInhabitedTime() : this.level.paperConfig().chunks.fixedChunkInhabitedTime;
++    }
++    // Paper end
++
+     @Override
+     public GameEventListenerRegistry getListenerRegistry(int p_251193_) {
+         return this.level instanceof ServerLevel serverlevel
 @@ -233,6 +_,15 @@
          }
      }
@@ -189,7 +203,7 @@
              } else {
                  blockentity = null;
 -                LOGGER.warn("Tried to load a DUMMY block entity @ {} but found not block entity block {} at location", p_62871_, blockstate);
-+                if (false) LOGGER.warn("Tried to load a DUMMY block entity @ {} but found not block entity block {} at location", p_62871_, blockstate);
++                if (Boolean.parseBoolean("false")) LOGGER.warn("Tried to load a DUMMY block entity @ {} but found not block entity block {} at location", p_62871_, blockstate);
              }
          } else {
              blockentity = BlockEntity.loadStatic(p_62871_, blockstate, p_62872_, this.level.registryAccess());
@@ -198,7 +212,7 @@
              this.addAndRegisterBlockEntity(blockentity);
          } else {
 -            LOGGER.warn("Tried to load a block entity for block {} but failed at location {}", blockstate, p_62871_);
-+            if (false) LOGGER.warn("Tried to load a block entity for block {} but failed at location {}", blockstate, p_62871_);
++            if (Boolean.parseBoolean("false")) LOGGER.warn("Tried to load a block entity for block {} but failed at location {}", blockstate, p_62871_);
          }
  
          return blockentity;

@@ -24,17 +24,25 @@
  import java.util.function.BooleanSupplier;
  import javax.annotation.Nullable;
  import joptsimple.OptionParser;
-@@ -64,7 +_,8 @@
+@@ -63,8 +_,16 @@
+ public class Main {
      private static final Logger LOGGER = LogUtils.getLogger();
  
++    // Paper start - Reset loggers after shutdown
++    static {
++        System.setProperty("java.util.logging.manager", "io.papermc.paper.log.CustomLogManager");
++    }
++    // Paper end - Reset loggers after shutdown
++
      @DontObfuscate
 -    public static void main(String[] p_129699_) {
 +    public static void main(String[] p_129699_) throws Exception {
++        if (System.getProperty("jdk.nio.maxCachedBufferSize") == null) System.setProperty("jdk.nio.maxCachedBufferSize", "262144"); // Paper - cap per-thread NIO cache size; https://www.evanjones.ca/java-bytebuffer-leak.html
 +        Youer.initI18n(); // Youer
          SharedConstants.tryDetectVersion();
          OptionParser optionparser = new OptionParser();
          OptionSpec<Void> optionspec = optionparser.accepts("nogui");
-@@ -83,6 +_,68 @@
+@@ -83,6 +_,91 @@
          OptionSpec<Void> optionspec13 = optionparser.accepts("jfrProfile");
          OptionSpec<Path> optionspec14 = optionparser.accepts("pidFile").withRequiredArg().withValuesConvertedBy(new PathConverter());
          OptionSpec<String> optionspec15 = optionparser.nonOptions();
@@ -93,6 +101,29 @@
 +                .defaultsTo(new File[] {})
 +                .describedAs("Jar file");
 +        // Paper end
++
++        // Purpur Start
++        optionparser.acceptsAll(Arrays.asList("purpur", "purpur-settings"), "File for purpur settings")
++                .withRequiredArg()
++                .ofType(File.class)
++                .defaultsTo(new File("purpur.yml"))
++                .describedAs("Yml file");
++
++        optionparser.acceptsAll(Arrays.asList("pufferfish", "pufferfish-settings"), "File for pufferfish settings")
++                .withRequiredArg()
++                .ofType(File.class)
++                .defaultsTo(new File("pufferfish.yml"))
++                .describedAs("Yml file");
++        // Purpur end
++
++        // Paper start
++        optionparser.acceptsAll(Arrays.asList("server-name"), "Name of the server")
++                .withRequiredArg()
++                .ofType(String.class)
++                .defaultsTo("Unknown Server")
++                .describedAs("Name");
++        // Paper end
++
 +        // Youer Start
 +        optionparser.acceptsAll(Arrays.asList("Y", "youer-settings"), "File for youer settings")
 +                .withRequiredArg()
@@ -134,7 +165,7 @@
  
              Path path = optionset.valueOf(optionspec14);
              if (path != null) {
-@@ -101,28 +_,40 @@
+@@ -101,28 +_,49 @@
                  JvmProfiler.INSTANCE.start(Environment.SERVER);
              }
  
@@ -170,11 +201,20 @@
 -            if (!eula.hasAgreedToEULA()) {
 -                LOGGER.info("You need to agree to the EULA in order to run the server. Go to eula.txt for more info.");
 -                return;
--            }
++            // Paper start - fix SPIGOT-5824
++            File file1;
++            File userCacheFile = new File(Services.USERID_CACHE_FILE);
++            if (optionset.has(optionspec9)) {
++                file1 = new File(optionset.valueOf(optionspec9));
++                userCacheFile = new File(file1, Services.USERID_CACHE_FILE);
++            } else {
++                file1 = new File(bukkitConfiguration.getString("settings.world-container", "."));
+             }
 -
-             File file1 = new File(optionset.valueOf(optionspec9));
+-            File file1 = new File(optionset.valueOf(optionspec9));
 -            Services services = Services.create(new YggdrasilAuthenticationService(Proxy.NO_PROXY), file1);
-+            Services services = Services.create(new PaperAuthenticationService(Proxy.NO_PROXY), file1, optionset); // Paper - pass OptionSet to load paper config files; override authentication service
++            // Paper end - fix SPIGOT-5824
++            Services services = Services.create(new io.papermc.paper.profile.PaperAuthenticationService(Proxy.NO_PROXY), file1, userCacheFile, optionset); // Paper - pass OptionSet to load paper config files; override authentication service; fix world-container
              String s = Optional.ofNullable(optionset.valueOf(optionspec10)).orElse(dedicatedserversettings.getProperties().levelName);
 +            if (s == null || s.isEmpty() || new File(file1, s).getAbsolutePath().equals(new File(s).getAbsolutePath())) {
 +                LOGGER.error("Invalid world directory specified, must not be null, empty or the same directory as your universe! " + s);

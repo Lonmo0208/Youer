@@ -73,8 +73,11 @@ public class PermissibleBase implements Permissible {
 
         String name = inName.toLowerCase(Locale.ROOT);
 
-        if (isPermissionSet(name)) {
-            return permissions.get(name).getValue();
+        // Paper start
+        PermissionAttachmentInfo info = permissions.get(name);
+        if (info != null) {
+            return info.getValue();
+            // Paper end
         } else {
             Permission perm = Bukkit.getServer().getPluginManager().getPermission(name);
 
@@ -94,15 +97,18 @@ public class PermissibleBase implements Permissible {
 
         String name = perm.getName().toLowerCase(Locale.ROOT);
 
-        if (isPermissionSet(name)) {
-            return permissions.get(name).getValue();
+        // Paper start
+        PermissionAttachmentInfo info = permissions.get(name);
+        if (info != null) {
+            return info.getValue();
         }
+        // Paper end
         return perm.getDefault().getValue(isOp());
     }
 
     @Override
     @NotNull
-    public PermissionAttachment addAttachment(@NotNull Plugin plugin, @NotNull String name, boolean value) {
+    public synchronized PermissionAttachment addAttachment(@NotNull Plugin plugin, @NotNull String name, boolean value) { // Paper - synchronized
         if (name == null) {
             throw new IllegalArgumentException("Permission name cannot be null");
         } else if (plugin == null) {
@@ -121,7 +127,7 @@ public class PermissibleBase implements Permissible {
 
     @Override
     @NotNull
-    public PermissionAttachment addAttachment(@NotNull Plugin plugin) {
+    public synchronized PermissionAttachment addAttachment(@NotNull Plugin plugin) { // Paper - synchronized
         if (plugin == null) {
             throw new IllegalArgumentException("Plugin cannot be null");
         } else if (!plugin.isEnabled()) {
@@ -137,7 +143,7 @@ public class PermissibleBase implements Permissible {
     }
 
     @Override
-    public void removeAttachment(@NotNull PermissionAttachment attachment) {
+    public synchronized void removeAttachment(@NotNull PermissionAttachment attachment) { // Paper - synchronized
         if (attachment == null) {
             throw new IllegalArgumentException("Attachment cannot be null");
         }
@@ -156,14 +162,14 @@ public class PermissibleBase implements Permissible {
     }
 
     @Override
-    public void recalculatePermissions() {
+    public synchronized void recalculatePermissions() { // Paper - synchronized
         clearPermissions();
         Set<Permission> defaults = Bukkit.getServer().getPluginManager().getDefaultPermissions(isOp());
         Bukkit.getServer().getPluginManager().subscribeToDefaultPerms(isOp(), parent);
 
         for (Permission perm : defaults) {
             String name = perm.getName().toLowerCase(Locale.ROOT);
-            permissions.put(name, new PermissionAttachmentInfo(parent, name, null, true));
+            permissions.put(name, new PermissionAttachmentInfo(parent, name, null, perm.getDefault().getValue(isOp()))); // Purpur
             Bukkit.getServer().getPluginManager().subscribeToPermission(name, parent);
             calculateChildPermissions(perm.getChildren(), false, null);
         }
@@ -191,7 +197,7 @@ public class PermissibleBase implements Permissible {
             String name = entry.getKey();
 
             Permission perm = Bukkit.getServer().getPluginManager().getPermission(name);
-            boolean value = entry.getValue() ^ invert;
+            boolean value = (entry.getValue() == null && perm != null ? perm.getDefault().getValue(isOp()) : entry.getValue()) ^ invert; // Purpur
             String lname = name.toLowerCase(Locale.ROOT);
 
             permissions.put(lname, new PermissionAttachmentInfo(parent, lname, attachment, value));
@@ -205,7 +211,7 @@ public class PermissibleBase implements Permissible {
 
     @Override
     @Nullable
-    public PermissionAttachment addAttachment(@NotNull Plugin plugin, @NotNull String name, boolean value, int ticks) {
+    public synchronized PermissionAttachment addAttachment(@NotNull Plugin plugin, @NotNull String name, boolean value, int ticks) { // Paper
         if (name == null) {
             throw new IllegalArgumentException("Permission name cannot be null");
         } else if (plugin == null) {
@@ -225,7 +231,7 @@ public class PermissibleBase implements Permissible {
 
     @Override
     @Nullable
-    public PermissionAttachment addAttachment(@NotNull Plugin plugin, int ticks) {
+    public synchronized PermissionAttachment addAttachment(@NotNull Plugin plugin, int ticks) { // Paper - synchronized
         if (plugin == null) {
             throw new IllegalArgumentException("Plugin cannot be null");
         } else if (!plugin.isEnabled()) {
@@ -245,7 +251,7 @@ public class PermissibleBase implements Permissible {
 
     @Override
     @NotNull
-    public Set<PermissionAttachmentInfo> getEffectivePermissions() {
+    public synchronized Set<PermissionAttachmentInfo> getEffectivePermissions() { // Paper - synchronized
         return new HashSet<PermissionAttachmentInfo>(permissions.values());
     }
 

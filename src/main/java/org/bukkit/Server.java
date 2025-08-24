@@ -679,6 +679,15 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
     @NotNull
     public List<World> getWorlds();
 
+    // Paper start
+    /**
+     * Gets whether the worlds are being ticked right now.
+     *
+     * @return true if the worlds are being ticked, false otherwise.
+     */
+    public boolean isTickingWorlds();
+    // Paper end
+
     /**
      * Gets a list of all world name on this server.
      *
@@ -735,6 +744,28 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
      */
     @Nullable
     public World getWorld(@NotNull UUID uid);
+
+    // Paper start
+    /**
+     * Gets the world from the given NamespacedKey
+     *
+     * @param worldKey the NamespacedKey of the world to retrieve
+     * @return a world with the given NamespacedKey, or null if none exists
+     */
+    @Nullable
+    default World getWorld(@NotNull NamespacedKey worldKey) {
+        return getWorld((net.kyori.adventure.key.Key) worldKey);
+    }
+
+    /**
+     * Gets the world from the given Key
+     *
+     * @param worldKey the Key of the world to retrieve
+     * @return a world with the given Key, or null if none exists
+     */
+    @Nullable
+    World getWorld(@NotNull net.kyori.adventure.key.Key worldKey);
+    // Paper end
 
     /**
      * Create a new virtual {@link WorldBorder}.
@@ -858,6 +889,22 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
      */
     public void reloadData();
 
+    // Paper start - update reloadable data
+    /**
+     * Updates all advancement, tag, and recipe data to all connected clients.
+     * Useful for updating clients to new advancements/recipes/tags.
+     * @see #updateRecipes()
+     */
+    void updateResources();
+
+    /**
+     * Updates recipe data and the recipe book to each player. Useful for
+     * updating clients to new recipes.
+     * @see #updateResources()
+     */
+    void updateRecipes();
+    // Paper end - update reloadable data
+
     /**
      * Returns the primary logger associated with this server instance.
      *
@@ -901,6 +948,18 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
      */
     @Contract("null -> false")
     public boolean addRecipe(@Nullable Recipe recipe);
+
+    // Paper start - method to send recipes immediately
+    /**
+     * Adds a recipe to the crafting manager.
+     *
+     * @param recipe the recipe to add
+     * @param resendRecipes true to update the client with the full set of recipes
+     * @return true if the recipe was added, false if it wasn't for some reason
+     */
+    @Contract("null, _ -> false")
+    boolean addRecipe(@Nullable Recipe recipe, boolean resendRecipes);
+    // Paper end - method to send recipes immediately
 
     /**
      * Get a list of all recipes for a given item. The stack size is ignored
@@ -1070,6 +1129,22 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
      */
     public boolean removeRecipe(@NotNull NamespacedKey key);
 
+    // Paper start - method to resend recipes
+    /**
+     * Remove a recipe from the server.
+     * <p>
+     * <b>Note that removing a recipe may cause permanent loss of data
+     * associated with that recipe (eg whether it has been discovered by
+     * players).</b>
+     *
+     * @param key NamespacedKey of recipe to remove.
+     * @param resendRecipes true to update all clients on the new recipe list.
+     *                      Will only update if a recipe was actually removed
+     * @return True if recipe was removed
+     */
+    boolean removeRecipe(@NotNull NamespacedKey key, boolean resendRecipes);
+    // Paper end - method to resend recipes
+
     /**
      * Gets a list of command aliases defined in the server properties.
      *
@@ -1206,6 +1281,25 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
     @Deprecated
     @NotNull
     public OfflinePlayer getOfflinePlayer(@NotNull String name);
+
+    // Paper start
+    /**
+     * Gets the player by the given name, regardless if they are offline or
+     * online.
+     * <p>
+     * This will not make a web request to get the UUID for the given name,
+     * thus this method will not block. However this method will return
+     * {@code null} if the player is not cached.
+     * </p>
+     *
+     * @param name the name of the player to retrieve
+     * @return an offline player if cached, {@code null} otherwise
+     * @see #getOfflinePlayer(String)
+     * @see #getOfflinePlayer(java.util.UUID)
+     */
+    @Nullable
+    public OfflinePlayer getOfflinePlayerIfCached(@NotNull String name);
+    // Paper end
 
     /**
      * Gets the player by the given UUID, regardless if they are offline or
@@ -2123,6 +2217,38 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
             throw new UnsupportedOperationException("Not supported yet.");
         }
 
+        // Paper start
+        @NotNull
+        public org.bukkit.configuration.file.YamlConfiguration getBukkitConfig()
+        {
+            throw new UnsupportedOperationException( "Not supported yet." );
+        }
+
+        @NotNull
+        public org.bukkit.configuration.file.YamlConfiguration getSpigotConfig()
+        {
+            throw new UnsupportedOperationException("Not supported yet.");
+        }
+
+        @NotNull
+        public org.bukkit.configuration.file.YamlConfiguration getPaperConfig()
+        {
+            throw new UnsupportedOperationException("Not supported yet.");
+        }
+        // Paper end
+
+        // Purpur start
+        @NotNull
+        public org.bukkit.configuration.file.YamlConfiguration getPurpurConfig() {
+            throw new UnsupportedOperationException("Not supported yet.");
+        }
+
+        @NotNull
+        public java.util.Properties getServerProperties() {
+            throw new UnsupportedOperationException("Not supported yet.");
+        }
+        // Purpur end
+
         /**
          * Sends the component to the player
          *
@@ -2152,23 +2278,6 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
     @NotNull
     Spigot spigot();
     // Spigot end
-
-    /**
-     * Gets the default no permission message used on the server
-     *
-     * @return the default message
-     * @deprecated use {@link #permissionMessage()}
-     */
-    @NotNull
-    @Deprecated
-    String getPermissionMessage();
-
-    /**
-     * Gets the default no permission message used on the server
-     *
-     * @return the default message
-     */
-    @NotNull net.kyori.adventure.text.Component permissionMessage();
 
     /**
      * Creates a PlayerProfile for the specified uuid, with name as null.
@@ -2406,5 +2515,123 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
      */
     boolean suggestPlayerNamesWhenNullTabCompletions();
 
+    /**
+     * Gets the default no permission message used on the server
+     *
+     * @return the default message
+     * @deprecated use {@link #permissionMessage()}
+     */
+    @NotNull
+    @Deprecated
+    String getPermissionMessage();
+
+    /**
+     * Gets the default no permission message used on the server
+     *
+     * @return the default message
+     */
+    @NotNull net.kyori.adventure.text.Component permissionMessage();
+
     void reloadPermissions(); // Paper
+
+    // Purpur start
+    /**
+     * Get the name of this server
+     * @return the name of the server
+     */
+    @NotNull
+    String getServerName();
+
+    /**
+     * Check if server is lagging according to laggy threshold setting
+     *
+     * @return True if lagging
+     */
+    boolean isLagging();
+
+    /**
+     * Add an Item as fuel for furnaces
+     *
+     * @param material The material that will be the fuel
+     * @param burnTime The time (in ticks) this item will burn for
+     */
+    public void addFuel(@NotNull Material material, int burnTime);
+
+    /**
+     * Remove an item as fuel for furnaces
+     *
+     * @param material The material that will no longer be a fuel
+     */
+    public void removeFuel(@NotNull Material material);
+
+    /**
+     * Creates debug block highlight on specified block location and show it to all players on the server.
+     * <p>
+     * Clients may be inconsistent in displaying it.
+     * @param location Location to highlight
+     * @param duration Duration for highlight to show in milliseconds
+     */
+    void sendBlockHighlight(@NotNull Location location, int duration);
+
+    /**
+     * Creates debug block highlight on specified block location and show it to all players on the server.
+     * <p>
+     * Clients may be inconsistent in displaying it.
+     * @param location Location to highlight
+     * @param duration Duration for highlight to show in milliseconds
+     * @param argb Color of the highlight. ARGB int. Will be ignored on some versions of vanilla client
+     */
+    void sendBlockHighlight(@NotNull Location location, int duration, int argb);
+
+    /**
+     * Creates debug block highlight on specified block location and show it to all players on the server.
+     * <p>
+     * Clients may be inconsistent in displaying it.
+     * @param location Location to highlight
+     * @param duration Duration for highlight to show in milliseconds
+     * @param text Text to show above the highlight
+     */
+    void sendBlockHighlight(@NotNull Location location, int duration, @NotNull String text);
+
+    /**
+     * Creates debug block highlight on specified block location and show it to all players on the server.
+     * <p>
+     * Clients may be inconsistent in displaying it.
+     * @param location Location to highlight
+     * @param duration Duration for highlight to show in milliseconds
+     * @param text Text to show above the highlight
+     * @param argb Color of the highlight. ARGB int. Will be ignored on some versions of vanilla client
+     */
+    void sendBlockHighlight(@NotNull Location location, int duration, @NotNull String text, int argb);
+
+    /**
+     * Creates debug block highlight on specified block location and show it to all players on the server.
+     * <p>
+     * Clients may be inconsistent in displaying it.
+     * @param location Location to highlight
+     * @param duration Duration for highlight to show in milliseconds
+     * @param color Color of the highlight. Will be ignored on some versions of vanilla client
+     * @param transparency Transparency of the highlight
+     * @throws IllegalArgumentException If transparency is outside 0-255 range
+     */
+    void sendBlockHighlight(@NotNull Location location, int duration, @NotNull org.bukkit.Color color, int transparency);
+
+    /**
+     * Creates debug block highlight on specified block location and show it to all players on the server.
+     * <p>
+     * Clients may be inconsistent in displaying it.
+     * @param location Location to highlight
+     * @param duration Duration for highlight to show in milliseconds
+     * @param text Text to show above the highlight
+     * @param color Color of the highlight. Will be ignored on some versions of vanilla client
+     * @param transparency Transparency of the highlight
+     * @throws IllegalArgumentException If transparency is outside 0-255 range
+     */
+    void sendBlockHighlight(@NotNull Location location, int duration, @NotNull String text, @NotNull org.bukkit.Color color, int transparency);
+
+    /**
+     * Clears all debug block highlights for all players on the server.
+     */
+    void clearBlockHighlights();
+    // Purpur end
 }

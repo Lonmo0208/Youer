@@ -1,6 +1,33 @@
 --- a/net/minecraft/world/level/EntityGetter.java
 +++ b/net/minecraft/world/level/EntityGetter.java
-@@ -97,11 +_,31 @@
+@@ -92,20 +_,62 @@
+         return player;
+     }
+ 
++    // Paper start
++    default List<org.bukkit.entity.HumanEntity> findNearbyBukkitPlayers(double x, double y, double z, double radius, boolean notSpectator) {
++        return findNearbyBukkitPlayers(x, y, z, radius, notSpectator ? EntitySelector.NO_SPECTATORS : net.minecraft.world.entity.EntitySelector.NO_CREATIVE_OR_SPECTATOR);
++    }
++
++    default List<org.bukkit.entity.HumanEntity> findNearbyBukkitPlayers(double x, double y, double z, double radius, @Nullable Predicate<Entity> predicate) {
++        com.google.common.collect.ImmutableList.Builder<org.bukkit.entity.HumanEntity> builder = com.google.common.collect.ImmutableList.builder();
++
++        for (Player human : this.players()) {
++            if (predicate == null || predicate.test(human)) {
++                double distanceSquared = human.distanceToSqr(x, y, z);
++
++                if (radius < 0.0D || distanceSquared < radius * radius) {
++                    builder.add(human.getBukkitEntity());
++                }
++            }
++        }
++
++        return builder.build();
++    }
++    // Paper end
++
+     @Nullable
+     default Player getNearestPlayer(Entity p_45931_, double p_45932_) {
          return this.getNearestPlayer(p_45931_.getX(), p_45931_.getY(), p_45931_.getZ(), p_45932_, false);
      }
  
@@ -15,7 +42,7 @@
          Predicate<Entity> predicate = p_45929_ ? EntitySelector.NO_CREATIVE_OR_SPECTATOR : EntitySelector.NO_SPECTATORS;
          return this.getNearestPlayer(p_45925_, p_45926_, p_45927_, p_45928_, predicate);
      }
-+
+ 
 +    // Paper start - Affects Spawning API
 +    default boolean hasNearbyAlivePlayerThatAffectsSpawning(double x, double y, double z, double range) {
 +        for (Player player : this.players()) {
@@ -29,6 +56,11 @@
 +        return false;
 +    }
 +    // Paper end - Affects Spawning API
- 
++
      default boolean hasNearbyAlivePlayer(double p_45915_, double p_45916_, double p_45917_, double p_45918_) {
          for (Player player : this.players()) {
+-            if (EntitySelector.NO_SPECTATORS.test(player) && EntitySelector.LIVING_ENTITY_STILL_ALIVE.test(player)) {
++            if (EntitySelector.NO_SPECTATORS.test(player) && EntitySelector.LIVING_ENTITY_STILL_ALIVE.test(player) && EntitySelector.notAfk.test(player)) { // Purpur
+                 double d0 = player.distanceToSqr(p_45915_, p_45916_, p_45917_);
+                 if (p_45918_ < 0.0 || d0 < p_45918_ * p_45918_) {
+                     return true;

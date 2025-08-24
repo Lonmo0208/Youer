@@ -26,7 +26,7 @@
      @Nullable
      public UUID thrower;
      @Nullable
-@@ -49,6 +_,11 @@
+@@ -49,6 +_,19 @@
      @Nullable
      public UUID target;
      public final float bobOffs;
@@ -35,9 +35,31 @@
 +     */
 +    public int lifespan = ItemEntity.LIFETIME;
 +    public boolean canMobPickup = true; // Paper - Item#canEntityPickup
++    private int despawnRate = -1; // Paper - Alternative item-despawn-rate
++    public net.kyori.adventure.util.TriState frictionState = net.kyori.adventure.util.TriState.NOT_SET; // Paper - Friction API
++    // Purpur start
++    public boolean immuneToCactus = false;
++    public boolean immuneToExplosion = false;
++    public boolean immuneToFire = false;
++    public boolean immuneToLightning = false;
++    // Purpur end
  
      public ItemEntity(EntityType<? extends ItemEntity> p_31991_, Level p_31992_) {
          super(p_31991_, p_31992_);
+@@ -57,7 +_,12 @@
+     }
+ 
+     public ItemEntity(Level p_32001_, double p_32002_, double p_32003_, double p_32004_, ItemStack p_32005_) {
+-        this(p_32001_, p_32002_, p_32003_, p_32004_, p_32005_, p_32001_.random.nextDouble() * 0.2 - 0.1, 0.2, p_32001_.random.nextDouble() * 0.2 - 0.1);
++        // Paper start - Don't use level random in entity constructors (to make them thread-safe)
++        this(EntityType.ITEM, p_32001_);
++        this.setPos(p_32002_, p_32003_, p_32004_);
++        this.setDeltaMovement(this.random.nextDouble() * 0.2D - 0.1D, 0.2D, this.random.nextDouble() * 0.2D - 0.1D);
++        this.setItem(p_32005_);
++        // Paper end - Don't use level random in entity constructors
+     }
+ 
+     public ItemEntity(
 @@ -67,6 +_,7 @@
          this.setPos(p_149664_, p_149665_, p_149666_);
          this.setDeltaMovement(p_149668_, p_149669_, p_149670_);
@@ -81,11 +103,17 @@
              if (this.isInWater() && this.getFluidHeight(FluidTags.WATER) > 0.1F) {
                  this.setUnderwaterMovement();
              } else if (this.isInLava() && this.getFluidHeight(FluidTags.LAVA) > 0.1F) {
-@@ -153,7 +_,8 @@
+@@ -152,8 +_,13 @@
+             if (!this.onGround() || this.getDeltaMovement().horizontalDistanceSqr() > 1.0E-5F || (this.tickCount + this.getId()) % 4 == 0) {
                  this.move(MoverType.SELF, this.getDeltaMovement());
                  float f = 0.98F;
-                 if (this.onGround()) {
+-                if (this.onGround()) {
 -                    f = this.level().getBlockState(this.getBlockPosBelowThatAffectsMyMovement()).getBlock().getFriction() * 0.98F;
++                // Paper start - Friction API
++                if (frictionState == net.kyori.adventure.util.TriState.FALSE) {
++                    f = 1F;
++                } else if (this.onGround()) {
++                    // Paper end - Friction API
 +                    BlockPos groundPos = getBlockPosBelowThatAffectsMyMovement();
 +                    f = this.level().getBlockState(groundPos).getFriction(level(), groundPos, this) * 0.98F;
                  }
@@ -109,7 +137,7 @@
  
 -            if (!this.level().isClientSide && this.age >= 6000) {
 +            ItemStack item = this.getItem();
-+            if (!this.level().isClientSide && this.age >= lifespan) {
++            if (!this.level().isClientSide && this.age >= this.despawnRate) { // Spigot // Paper - Alternative item-despawn-rate
 +            	  // Clamping to MAX_VALUE -1 as age is a Short and going above that would produce an infinite lifespan implicitly (accidentally)
 +                this.lifespan = Mth.clamp(lifespan + net.neoforged.neoforge.event.EventHooks.onItemExpire(this), 0, Short.MAX_VALUE - 1);
 +                if (this.age >= lifespan) {
@@ -140,7 +168,7 @@
 +        }
 +        // Paper end - remove anti tick skipping measures / wall time - copied from above
 +
-+        if (!this.level().isClientSide && this.age >= this.level().spigotConfig.itemDespawnRate) { // Spigot
++        if (!this.level().isClientSide && this.age >= this.despawnRate) { // Spigot // Paper - Alternative item-despawn-rate
 +            // CraftBukkit start - fire ItemDespawnEvent
 +            if (org.bukkit.craftbukkit.event.CraftEventFactory.callItemDespawnEvent(this).isCancelled()) {
 +                this.age = 0;
@@ -162,12 +190,20 @@
 +            double radius = this.level().spigotConfig.itemMerge;
              for (ItemEntity itementity : this.level()
 -                .getEntitiesOfClass(ItemEntity.class, this.getBoundingBox().inflate(0.5, 0.0, 0.5), p_186268_ -> p_186268_ != this && p_186268_.isMergable())) {
-+                .getEntitiesOfClass(ItemEntity.class, this.getBoundingBox().inflate(radius, radius - 0.5D, radius), p_186268_ -> p_186268_ != this && p_186268_.isMergable())) {
++                .getEntitiesOfClass(ItemEntity.class, this.getBoundingBox().inflate(radius, this.level().paperConfig().entities.behavior.onlyMergeItemsHorizontally ? 0 : radius - 0.5D, radius), p_186268_ -> p_186268_ != this && p_186268_.isMergable())) { // Paper - configuration to only merge items horizontally
 +                // Spigot end
                  if (itementity.isMergable()) {
                      this.tryToMerge(itementity);
                      if (this.isRemoved()) {
-@@ -229,7 +_,7 @@
+@@ -222,14 +_,14 @@
+ 
+     private boolean isMergable() {
+         ItemStack itemstack = this.getItem();
+-        return this.isAlive() && this.pickupDelay != 32767 && this.age != -32768 && this.age < 6000 && itemstack.getCount() < itemstack.getMaxStackSize();
++        return this.isAlive() && this.pickupDelay != 32767 && this.age != -32768 && this.age < this.despawnRate && itemstack.getCount() < itemstack.getMaxStackSize(); // Paper - Alternative item-despawn-rate
+     }
+ 
+     private void tryToMerge(ItemEntity p_32016_) {
          ItemStack itemstack = this.getItem();
          ItemStack itemstack1 = p_32016_.getItem();
          if (Objects.equals(this.target, p_32016_.target) && areMergable(itemstack, itemstack1)) {
@@ -194,6 +230,24 @@
          }
      }
  
+@@ -269,7 +_,16 @@
+ 
+     @Override
+     public boolean hurt(DamageSource p_32013_, float p_32014_) {
+-        if (this.isInvulnerableTo(p_32013_)) {
++        // Purpur start
++        if (
++                (immuneToCactus && p_32013_.is(net.minecraft.world.damagesource.DamageTypes.CACTUS)) ||
++                        (immuneToFire && (p_32013_.is(DamageTypeTags.IS_FIRE) || p_32013_.is(net.minecraft.world.damagesource.DamageTypes.ON_FIRE) || p_32013_.is(net.minecraft.world.damagesource.DamageTypes.IN_FIRE))) ||
++                        (immuneToLightning && p_32013_.is(net.minecraft.world.damagesource.DamageTypes.LIGHTNING_BOLT)) ||
++                        (immuneToExplosion && p_32013_.is(DamageTypeTags.IS_EXPLOSION))
++        ) {
++            return false;
++        } else if (this.isInvulnerableTo(p_32013_)) {
++            // Purpur end
+             return false;
+         } else if (!this.getItem().isEmpty() && this.getItem().is(Items.NETHER_STAR) && p_32013_.is(DamageTypeTags.IS_EXPLOSION)) {
+             return false;
 @@ -278,11 +_,17 @@
          } else if (this.level().isClientSide) {
              return true;
@@ -213,7 +267,15 @@
                  this.discard();
              }
  
-@@ -295,6 +_,7 @@
+@@ -292,9 +_,15 @@
+ 
+     @Override
+     public void addAdditionalSaveData(CompoundTag p_32050_) {
++        // Paper start - Friction API
++        if (this.frictionState != net.kyori.adventure.util.TriState.NOT_SET) {
++            p_32050_.putString("Paper.FrictionState", this.frictionState.toString());
++        }
++        // Paper end - Friction API
          p_32050_.putShort("Health", (short)this.health);
          p_32050_.putShort("Age", (short)this.age);
          p_32050_.putShort("PickupDelay", (short)this.pickupDelay);
@@ -231,9 +293,21 @@
  
          if (p_32034_.hasUUID("Owner")) {
              this.target = p_32034_.getUUID("Owner");
-@@ -333,7 +_,7 @@
+@@ -332,8 +_,19 @@
+             this.setItem(ItemStack.EMPTY);
          }
  
++        // Paper start - Friction API
++        if (p_32034_.contains("Paper.FrictionState")) {
++            String fs = p_32034_.getString("Paper.FrictionState");
++            try {
++                frictionState = net.kyori.adventure.util.TriState.valueOf(fs);
++            } catch (Exception ignored) {
++                com.mojang.logging.LogUtils.getLogger().error("Unknown friction state " + fs + " for " + this);
++            }
++        }
++        // Paper end - Friction API
++
          if (this.getItem().isEmpty()) {
 -            this.discard();
 +            this.discard(null); // CraftBukkit - add Bukkit remove cause
@@ -327,6 +401,20 @@
                      itemstack.setCount(i);
                  }
  
+@@ -384,6 +_,13 @@
+ 
+     public void setItem(ItemStack p_32046_) {
+         this.getEntityData().set(DATA_ITEM, p_32046_);
++        this.despawnRate = this.level().paperConfig().entities.spawning.altItemDespawnRate.enabled ? this.level().paperConfig().entities.spawning.altItemDespawnRate.items.getOrDefault(p_32046_.getItem(), getItem().getEntityLifespan(this.level())) : getItem().getEntityLifespan(this.level()); // Paper - Alternative item-despawn-rate
++        // Purpur start
++        if (level().purpurConfig.itemImmuneToCactus.contains(p_32046_.getItem())) immuneToCactus = true;
++        if (level().purpurConfig.itemImmuneToExplosion.contains(p_32046_.getItem())) immuneToExplosion = true;
++        if (level().purpurConfig.itemImmuneToFire.contains(p_32046_.getItem())) immuneToFire = true;
++        if (level().purpurConfig.itemImmuneToLightning.contains(p_32046_.getItem())) immuneToLightning = true;
++        // level end
+     }
+ 
+     @Override
 @@ -398,6 +_,15 @@
          this.target = p_266724_;
      }

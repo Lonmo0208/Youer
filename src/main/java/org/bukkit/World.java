@@ -98,6 +98,33 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
     void setVoidDamageMinBuildHeightOffset(double minBuildHeightOffset);
     // Paper end - void damage configuration
 
+    // Paper start
+    /**
+     * @return The amount of Entities in this world
+     */
+    int getEntityCount();
+
+    /**
+     * @return The amount of Tile Entities in this world
+     */
+    int getTileEntityCount();
+
+    /**
+     * @return The amount of Tickable Tile Entities in this world
+     */
+    int getTickableTileEntityCount();
+
+    /**
+     * @return The amount of Chunks in this world
+     */
+    int getChunkCount();
+
+    /**
+     * @return The amount of Players in this world
+     */
+    int getPlayerCount();
+    // Paper end
+
     // Paper start - structure check API
     /**
      * Check if the naturally-generated structure exists at the position.
@@ -260,6 +287,37 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
      */
     @NotNull
     public Chunk getChunkAt(@NotNull Block block);
+
+    // Paper start - chunk long key API
+    /**
+     * Gets the chunk at the specified chunk key, which is the X and Z packed into a long.
+     * <p>
+     * See {@link Chunk#getChunkKey()} for easy access to the key, or you may calculate it as:
+     * long chunkKey = (long) chunkX &amp; 0xffffffffL | ((long) chunkZ &amp; 0xffffffffL) &gt;&gt; 32;
+     *
+     * @param chunkKey The Chunk Key to look up the chunk by
+     * @return The chunk at the specified key
+     */
+    @NotNull
+    default Chunk getChunkAt(long chunkKey) {
+        return getChunkAt(chunkKey, true);
+    }
+
+    /**
+     * Gets the chunk at the specified chunk key, which is the X and Z packed into a long.
+     * <p>
+     * See {@link Chunk#getChunkKey()} for easy access to the key, or you may calculate it as:
+     * long chunkKey = (long) chunkX &amp; 0xffffffffL | ((long) chunkZ &amp; 0xffffffffL) &gt;&gt; 32;
+     *
+     * @param chunkKey The Chunk Key to look up the chunk by
+     * @param generate Whether the chunk should be fully generated or not
+     * @return The chunk at the specified key
+     */
+    @NotNull
+    default Chunk getChunkAt(long chunkKey, boolean generate) {
+        return getChunkAt((int) chunkKey, (int) (chunkKey >> 32), generate);
+    }
+    // Paper end - chunk long key API
 
     // Paper start - isChunkGenerated API
     /**
@@ -1178,6 +1236,27 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
     @Nullable
     public RayTraceResult rayTraceEntities(@NotNull Location start, @NotNull Vector direction, double maxDistance, @Nullable Predicate<? super Entity> filter);
 
+    // Paper start
+    /**
+     * Performs a ray trace that checks for entity collisions.
+     * <p>
+     * This may not consider entities in currently unloaded chunks. Some
+     * implementations may impose artificial restrictions on the maximum
+     * distance.
+     *
+     * @param start the start position
+     * @param direction the ray direction
+     * @param maxDistance the maximum distance
+     * @param raySize entity bounding boxes will be uniformly expanded (or
+     *     shrinked) by this value before doing collision checks
+     * @param filter only entities that fulfill this predicate are considered,
+     *     or <code>null</code> to consider all entities
+     * @return the closest ray trace hit result, or <code>null</code> if there
+     *     is no hit
+     */
+    @Nullable RayTraceResult rayTraceEntities(io.papermc.paper.math.@NotNull Position start, @NotNull Vector direction, double maxDistance, double raySize, @Nullable Predicate<? super Entity> filter);
+    // Paper end
+
     /**
      * Performs a ray trace that checks for entity collisions.
      * <p>
@@ -1261,6 +1340,34 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
     @Nullable
     public RayTraceResult rayTraceBlocks(@NotNull Location start, @NotNull Vector direction, double maxDistance, @NotNull FluidCollisionMode fluidCollisionMode, boolean ignorePassableBlocks);
 
+    // Paper start
+    /**
+     * Performs a ray trace that checks for block collisions using the blocks'
+     * precise collision shapes.
+     * <p>
+     * If collisions with passable blocks are ignored, fluid collisions are
+     * ignored as well regardless of the fluid collision mode.
+     * <p>
+     * Portal blocks are only considered passable if the ray starts within
+     * them. Apart from that collisions with portal blocks will be considered
+     * even if collisions with passable blocks are otherwise ignored.
+     * <p>
+     * This may cause loading of chunks! Some implementations may impose
+     * artificial restrictions on the maximum distance.
+     *
+     * @param start the start position
+     * @param direction the ray direction
+     * @param maxDistance the maximum distance
+     * @param fluidCollisionMode the fluid collision mode
+     * @param ignorePassableBlocks whether to ignore passable but collidable
+     *     blocks (ex. tall grass, signs, fluids, ..)
+     * @param canCollide predicate for blocks the ray can potentially collide
+     *     with, or <code>null</code> to consider all blocks
+     * @return the ray trace hit result, or <code>null</code> if there is no hit
+     */
+    @Nullable RayTraceResult rayTraceBlocks(io.papermc.paper.math.@NotNull Position start, @NotNull Vector direction, double maxDistance, @NotNull FluidCollisionMode fluidCollisionMode, boolean ignorePassableBlocks, @Nullable Predicate<? super Block> canCollide);
+    // Paper end
+
     /**
      * Performs a ray trace that checks for both block and entity collisions.
      * <p>
@@ -1293,6 +1400,42 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
      */
     @Nullable
     public RayTraceResult rayTrace(@NotNull Location start, @NotNull Vector direction, double maxDistance, @NotNull FluidCollisionMode fluidCollisionMode, boolean ignorePassableBlocks, double raySize, @Nullable Predicate<? super Entity> filter);
+
+    // Paper start
+    /**
+     * Performs a ray trace that checks for both block and entity collisions.
+     * <p>
+     * Block collisions use the blocks' precise collision shapes. The
+     * <code>raySize</code> parameter is only taken into account for entity
+     * collision checks.
+     * <p>
+     * If collisions with passable blocks are ignored, fluid collisions are
+     * ignored as well regardless of the fluid collision mode.
+     * <p>
+     * Portal blocks are only considered passable if the ray starts within them.
+     * Apart from that collisions with portal blocks will be considered even if
+     * collisions with passable blocks are otherwise ignored.
+     * <p>
+     * This may cause loading of chunks! Some implementations may impose
+     * artificial restrictions on the maximum distance.
+     *
+     * @param start the start position
+     * @param direction the ray direction
+     * @param maxDistance the maximum distance
+     * @param fluidCollisionMode the fluid collision mode
+     * @param ignorePassableBlocks whether to ignore passable but collidable
+     *     blocks (ex. tall grass, signs, fluids, ..)
+     * @param raySize entity bounding boxes will be uniformly expanded (or
+     *     shrinked) by this value before doing collision checks
+     * @param filter only entities that fulfill this predicate are considered,
+     *     or <code>null</code> to consider all entities
+     * @param canCollide predicate for blocks the ray can potentially collide
+     *     with, or <code>null</code> to consider all blocks
+     * @return the closest ray trace hit result with either a block or an
+     *     entity, or <code>null</code> if there is no hit
+     */
+    @Nullable RayTraceResult rayTrace(io.papermc.paper.math.@NotNull Position start, @NotNull Vector direction, double maxDistance, @NotNull FluidCollisionMode fluidCollisionMode, boolean ignorePassableBlocks, double raySize, @Nullable Predicate<? super Entity> filter, @Nullable Predicate<? super Block> canCollide);
+    // Paper end
 
     /**
      * Gets the default spawn {@link Location} of this world
@@ -3290,6 +3433,72 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
     @Nullable
     StructureSearchResult locateNearestStructure(@NotNull Location origin, @NotNull Structure structure, int radius, boolean findUnexplored);
 
+    // Paper start
+    /**
+     * Locates the nearest biome based on an origin, biome type, and radius to search.
+     * Step defaults to {@code 8}.
+     *
+     * @param origin Origin location
+     * @param biome Biome to find
+     * @param radius radius to search
+     * @return Location of biome or null if not found in specified radius
+     * @deprecated use {@link #locateNearestBiome(Location, int, Biome...)}
+     */
+    @Deprecated
+    @Nullable
+    default Location locateNearestBiome(@NotNull Location origin, @NotNull Biome biome, int radius) {
+        return java.util.Optional.ofNullable(this.locateNearestBiome(origin, radius, 8, 8, biome)).map(BiomeSearchResult::getLocation).orElse(null);
+    }
+
+    /**
+     * Locates the nearest biome based on an origin, biome type, and radius to search
+     * and step
+     *
+     * @param origin Origin location
+     * @param biome Biome to find
+     * @param radius radius to search
+     * @param step Search step 1 would mean checking every block, 8 would be every 8th block
+     * @return Location of biome or null if not found in specified radius
+     * @deprecated use {@link #locateNearestBiome(Location, int, int, int, Biome...)}
+     */
+    @Deprecated
+    @Nullable
+    default Location locateNearestBiome(@NotNull Location origin, @NotNull Biome biome, int radius, int step) {
+        return java.util.Optional.ofNullable(this.locateNearestBiome(origin, radius, step, step, biome)).map(BiomeSearchResult::getLocation).orElse(null);
+    }
+
+    /**
+     * Gets the coordinate scaling of this world.
+     *
+     * @return the coordinate scale
+     */
+    double getCoordinateScale();
+
+    /**
+     * Checks if this world has a fixed time
+     *
+     * @return whether this world has fixed time
+     */
+    boolean isFixedTime();
+
+    /**
+     * Gets the collection of materials that burn infinitely in this world.
+     *
+     * @return the materials that will forever stay lit by fire
+     */
+    @NotNull
+    Collection<Material> getInfiniburn();
+
+    /**
+     * Posts a specified game event at a location
+     *
+     * @param sourceEntity optional source entity
+     * @param gameEvent the game event to post
+     * @param position the position in the world where to post the event to listeners
+     */
+    void sendGameEvent(@Nullable Entity sourceEntity, @NotNull GameEvent gameEvent, @NotNull Vector position);
+    // Paper end
+
     // Spigot start
     public class Spigot {
 
@@ -3424,6 +3633,86 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
      */
     @Nullable
     public DragonBattle getEnderDragonBattle();
+
+    // Purpur start
+    /**
+     * Gets the local difficulty (based on inhabited time) at a location
+     *
+     * @param location Location to check
+     * @return The local difficulty
+     */
+    public float getLocalDifficultyAt(@NotNull Location location);
+
+    /**
+     * Creates debug block highlight on specified block location and show it to all players on this world.
+     * <p>
+     * Clients may be inconsistent in displaying it.
+     * @param location Location to highlight
+     * @param duration Duration for highlight to show in milliseconds
+     */
+    void sendBlockHighlight(@NotNull Location location, int duration);
+
+    /**
+     * Creates debug block highlight on specified block location and show it to all players on this world.
+     * <p>
+     * Clients may be inconsistent in displaying it.
+     * @param location Location to highlight
+     * @param duration Duration for highlight to show in milliseconds
+     * @param argb Color of the highlight. ARGB int. Will be ignored on some versions of vanilla client
+     */
+    void sendBlockHighlight(@NotNull Location location, int duration, int argb);
+
+    /**
+     * Creates debug block highlight on specified block location and show it to all players on this world.
+     * <p>
+     * Clients may be inconsistent in displaying it.
+     * @param location Location to highlight
+     * @param duration Duration for highlight to show in milliseconds
+     * @param text Text to show above the highlight
+     */
+    void sendBlockHighlight(@NotNull Location location, int duration, @NotNull String text);
+
+    /**
+     * Creates debug block highlight on specified block location and show it to all players on this world.
+     * <p>
+     * Clients may be inconsistent in displaying it.
+     * @param location Location to highlight
+     * @param duration Duration for highlight to show in milliseconds
+     * @param text Text to show above the highlight
+     * @param argb Color of the highlight. ARGB int. Will be ignored on some versions of vanilla client
+     */
+    void sendBlockHighlight(@NotNull Location location, int duration, @NotNull String text, int argb);
+
+    /**
+     * Creates debug block highlight on specified block location and show it to all players on this world.
+     * <p>
+     * Clients may be inconsistent in displaying it.
+     * @param location Location to highlight
+     * @param duration Duration for highlight to show in milliseconds
+     * @param color Color of the highlight. Will be ignored on some versions of vanilla client
+     * @param transparency Transparency of the highlight
+     * @throws IllegalArgumentException If transparency is outside 0-255 range
+     */
+    void sendBlockHighlight(@NotNull Location location, int duration, @NotNull org.bukkit.Color color, int transparency);
+
+    /**
+     * Creates debug block highlight on specified block location and show it to all players on this world.
+     * <p>
+     * Clients may be inconsistent in displaying it.
+     * @param location Location to highlight
+     * @param duration Duration for highlight to show in milliseconds
+     * @param text Text to show above the highlight
+     * @param color Color of the highlight. Will be ignored on some versions of vanilla client
+     * @param transparency Transparency of the highlight
+     * @throws IllegalArgumentException If transparency is outside 0-255 range
+     */
+    void sendBlockHighlight(@NotNull Location location, int duration, @NotNull String text, @NotNull org.bukkit.Color color, int transparency);
+
+    /**
+     * Clears all debug block highlights for all players on this world.
+     */
+    void clearBlockHighlights();
+    // Purpur end
 
     /**
      * Get all {@link FeatureFlag} enabled in this world.

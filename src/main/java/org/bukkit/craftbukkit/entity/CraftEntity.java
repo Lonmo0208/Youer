@@ -92,6 +92,23 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         this.entityType = CraftEntityType.minecraftToBukkit(entity.getType());
     }
 
+    // Purpur start - API for any mob to burn daylight
+    @Override
+    public boolean isImmuneToFire() {
+        return getHandle().fireImmune();
+    }
+
+    @Override
+    public void setImmuneToFire(Boolean fireImmune) {
+        getHandle().immuneToFire = fireImmune;
+    }
+
+    @Override
+    public boolean isInDaylight() {
+        return getHandle().isSunBurnTick();
+    }
+    // Purpur end - API for any mob to burn daylight
+
     public static <T extends Entity> CraftEntity getEntity(CraftServer server, T entity) {
         Preconditions.checkArgument(entity != null, "Unknown entity");
 
@@ -146,9 +163,39 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
     public void setVelocity(Vector velocity) {
         Preconditions.checkArgument(velocity != null, "velocity");
         velocity.checkFinite();
+        // Paper start - Warn server owners when plugins try to set super high velocities
+        if (!(this instanceof org.bukkit.entity.Projectile || this instanceof org.bukkit.entity.Minecart) && isUnsafeVelocity(velocity)) {
+            CraftServer.excessiveVelEx = new Exception("Excessive velocity set detected: tried to set velocity of entity " + entity.getScoreboardName() + " id #" + getEntityId() + " to (" + velocity.getX() + "," + velocity.getY() + "," + velocity.getZ() + ").");
+        }
+        // Paper end
         this.entity.setDeltaMovement(CraftVector.toNMS(velocity));
         this.entity.hurtMarked = true;
     }
+
+    // Paper start
+    /**
+     * Checks if the given velocity is not necessarily safe in all situations.
+     * This function returning true does not mean the velocity is dangerous or to be avoided, only that it may be
+     * a detriment to performance on the server.
+     *
+     * It is not to be used as a hard rule of any sort.
+     * Paper only uses it to warn server owners in watchdog crashes.
+     *
+     * @param vel incoming velocity to check
+     * @return if the velocity has the potential to be a performance detriment
+     */
+    private static boolean isUnsafeVelocity(Vector vel) {
+        final double x = vel.getX();
+        final double y = vel.getY();
+        final double z = vel.getZ();
+
+        if (x > 4 || x < -4 || y > 4 || y < -4 || z > 4 || z < -4) {
+            return true;
+        }
+
+        return false;
+    }
+    // Paper end
 
     @Override
     public double getHeight() {
@@ -232,6 +279,17 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         if ((!ignorePassengers && this.entity.isVehicle()) || this.entity.isRemoved()) { // Paper - Teleport passenger API
             return false;
         }
+
+        // Paper start - fix teleport event not being called
+        org.bukkit.event.entity.EntityTeleportEvent event = new org.bukkit.event.entity.EntityTeleportEvent(
+                this, this.getLocation(), location);
+        // cancelling the event is handled differently for players and entities,
+        // entities just stop teleporting, players will still teleport to the "from" location of the event
+        if (!event.callEvent() || event.getTo() == null) {
+            return false;
+        }
+        location = event.getTo();
+        // Paper end
 
         // If this entity is riding another entity, we must dismount before teleporting.
         if (dismount) this.entity.stopRiding(); // Paper - Teleport passenger API
@@ -1264,4 +1322,27 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         return this.getHandle().getScoreboardName();
     }
     // Paper end - entity scoreboard name
+
+    // Purpur start
+    @Override
+    public org.bukkit.entity.Player getRider() {
+        net.minecraft.world.entity.player.Player rider = getHandle().getRider();
+        return rider != null ? (org.bukkit.entity.Player) rider.getBukkitEntity() : null;
+    }
+
+    @Override
+    public boolean hasRider() {
+        return getHandle().getRider() != null;
+    }
+
+    @Override
+    public boolean isRidable() {
+        return getHandle().isRidable();
+    }
+
+    @Override
+    public boolean isRidableInWater() {
+        return !getHandle().dismountsUnderwater();
+    }
+    // Purpur end
 }

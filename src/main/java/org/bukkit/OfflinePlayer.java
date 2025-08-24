@@ -84,6 +84,74 @@ public interface OfflinePlayer extends ServerOperator, AnimalTamer, Configuratio
      */
     public boolean isBanned();
 
+    // Paper start
+    /**
+     * Permanently Bans this player from the server
+     *
+     * @param reason Reason for Ban
+     * @return Ban Entry
+     * @deprecated use {@link #ban(String, Date, String)}
+     */
+    @NotNull
+    @Deprecated(since = "1.20.4")
+    public default BanEntry banPlayer(@Nullable String reason) {
+        return banPlayer(reason, null, null);
+    }
+
+    /**
+     * Permanently Bans this player from the server
+     * @param reason Reason for Ban
+     * @param source Source of the ban, or null for default
+     * @return Ban Entry
+     * @deprecated use {@link #ban(String, Date, String)}
+     */
+    @NotNull
+    @Deprecated(since = "1.20.4")
+    public default BanEntry banPlayer(@Nullable String reason, @Nullable String source) {
+        return banPlayer(reason, null, source);
+    }
+
+    /**
+     * Bans this player from the server
+     * @param reason Reason for Ban
+     * @param expires When to expire the ban
+     * @return Ban Entry
+     * @deprecated use {@link #ban(String, Date, String)}
+     */
+    @NotNull
+    @Deprecated(since = "1.20.4")
+    public default BanEntry banPlayer(@Nullable String reason, @Nullable java.util.Date expires) {
+        return banPlayer(reason, expires, null);
+    }
+
+    /**
+     * Bans this player from the server
+     * @param reason Reason for Ban
+     * @param expires When to expire the ban
+     * @param source Source of the ban or null for default
+     * @return Ban Entry
+     * @deprecated use {@link #ban(String, Date, String)}
+     */
+    @NotNull
+    @Deprecated(since = "1.20.4")
+    public default BanEntry banPlayer(@Nullable String reason, @Nullable java.util.Date expires, @Nullable String source) {
+        return banPlayer(reason, expires, source, true);
+    }
+
+    /**
+     * @deprecated use {@link #ban(String, Date, String)}
+     */
+    @NotNull
+    @Deprecated(since = "1.20.4")
+    public default BanEntry banPlayer(@Nullable String reason, @Nullable java.util.Date expires, @Nullable String source, boolean kickIfOnline) {
+        BanEntry banEntry = Bukkit.getServer().getBanList(BanList.Type.NAME).addBan(getName(), reason, expires, source);
+        if (kickIfOnline && isOnline()) {
+            getPlayer().kickPlayer(reason);
+        }
+        return banEntry;
+    }
+    // Paper end
+
     /**
      * Adds this user to the {@link ProfileBanList}. If a previous ban exists, this will
      * update the entry.
@@ -505,4 +573,106 @@ public interface OfflinePlayer extends ServerOperator, AnimalTamer, Configuratio
     @Override
     io.papermc.paper.persistence.@NotNull PersistentDataContainerView getPersistentDataContainer();
     // Paper end - add pdc to offline player
+
+    // Purpur start - OfflinePlayer API
+    /**
+     * Determines if the OfflinePlayer is allowed to fly via jump key double-tap like
+     * in creative mode.
+     *
+     * @return True if the player is allowed to fly.
+     */
+    public boolean getAllowFlight();
+
+    /**
+     * Sets if the OfflinePlayer is allowed to fly via jump key double-tap like in
+     * creative mode.
+     *
+     * @param flight If flight should be allowed.
+     */
+    public void setAllowFlight(boolean flight);
+
+    /**
+     * Checks to see if this player is currently flying or not.
+     *
+     * @return True if the player is flying, else false.
+     */
+    public boolean isFlying();
+
+    /**
+     * Makes this player start or stop flying.
+     *
+     * @param value True to fly.
+     */
+    public void setFlying(boolean value);
+
+    /**
+     * Sets the speed at which a client will fly. Negative values indicate
+     * reverse directions.
+     *
+     * @param value The new speed, from -1 to 1.
+     * @throws IllegalArgumentException If new speed is less than -1 or
+     *     greater than 1
+     */
+    public void setFlySpeed(float value) throws IllegalArgumentException;
+
+    /**
+     * Sets the speed at which a client will walk. Negative values indicate
+     * reverse directions.
+     *
+     * @param value The new speed, from -1 to 1.
+     * @throws IllegalArgumentException If new speed is less than -1 or
+     *     greater than 1
+     */
+    public void setWalkSpeed(float value) throws IllegalArgumentException;
+
+    /**
+     * Gets the current allowed speed that a client can fly.
+     *
+     * @return The current allowed speed, from -1 to 1
+     */
+    public float getFlySpeed();
+
+    /**
+     * Gets the current allowed speed that a client can walk.
+     *
+     * @return The current allowed speed, from -1 to 1
+     */
+    public float getWalkSpeed();
+
+    /**
+     * Sets OfflinePlayer's location. If player is online, it falls back to the Player#teleport implementation.
+     *
+     * @param destination
+     * @return true if teleportation was successful
+     */
+    public boolean teleportOffline(@NotNull org.bukkit.Location destination);
+
+    /**
+     * Sets OfflinePlayer's location. If player is online, it falls back to the Player#teleport implementation.
+     *
+     * @param destination
+     * @param cause Teleport cause used if player is online
+     * @return true if teleportation was successful
+     */
+    public boolean teleportOffline(@NotNull org.bukkit.Location destination, @NotNull org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause);
+
+    /**
+     * Sets OfflinePlayer's location. If player is online, it falls back to the Player#teleportAsync implementation.
+     *
+     * @param destination
+     * @return <code>true</code> if teleportation successful
+     */
+    @NotNull
+    public java.util.concurrent.CompletableFuture<Boolean> teleportOfflineAsync(@NotNull Location destination);
+
+    /**
+     * Sets OfflinePlayer's location. If player is online, it falls back to the Player#teleportAsync implementation.
+     *
+     * @param destination
+     * @param cause Teleport cause used if player is online
+     * @return <code>true</code> if teleportation successful
+     */
+    @NotNull
+    public java.util.concurrent.CompletableFuture<Boolean> teleportOfflineAsync(@NotNull Location destination, @NotNull org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause);
+    // Purpur end - OfflinePlayer API
 }

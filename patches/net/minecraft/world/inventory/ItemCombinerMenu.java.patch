@@ -1,5 +1,13 @@
 --- a/net/minecraft/world/inventory/ItemCombinerMenu.java
 +++ b/net/minecraft/world/inventory/ItemCombinerMenu.java
+@@ -108,6 +_,7 @@
+         super.slotsChanged(p_39778_);
+         if (p_39778_ == this.inputSlots) {
+             this.createResult();
++            org.bukkit.craftbukkit.event.CraftEventFactory.callPrepareResultEvent(this, this instanceof SmithingMenu ? 3 : 2); // Paper - Add PrepareResultEvent
+         }
+     }
+ 
 @@ -119,6 +_,7 @@
  
      @Override
@@ -8,3 +16,13 @@
          return this.access
              .evaluate(
                  (p_339525_, p_339526_) -> !this.isValidBlock(p_339525_.getBlockState(p_339526_)) ? false : p_39780_.canInteractWithBlock(p_339526_, 4.0), true
+@@ -169,7 +_,9 @@
+                 return ItemStack.EMPTY;
+             }
+ 
++            this.activeQuickItem = itemstack; // Purpur - Anvil API
+             slot.onTake(p_39792_, itemstack1);
++            this.activeQuickItem = null; // Purpur - Anvil API
+         }
+ 
+         return itemstack;

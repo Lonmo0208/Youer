@@ -33,6 +33,7 @@ public class BansCommand extends Command {
 
     private final List<String> params = Arrays.asList("add", "show", "setmessage");
     private final List<String> params1 = Arrays.asList("item", "item-moshou", "entity", "enchantment");
+
     public BansCommand(String name) {
         super(name);
         this.description = I18n.as("banscmd.description");
@@ -127,6 +128,7 @@ public class BansCommand extends Command {
                             if (!material.isAir()) {
                                 wh.addItem(new GUIItem(new ItemStackFactory(material)
                                         .setDisplayName(s)
+                                        .addLore("§e" + I18n.as("banscmd.show.lore"))
                                         .toItemStack()) {
                                     @Override
                                     public void ClickAction(ClickType type, Player u, ItemStack itemStack) {
@@ -151,6 +153,7 @@ public class BansCommand extends Command {
                             if (!material.isAir()) {
                                 wh.addItem(new GUIItem(new ItemStackFactory(material)
                                         .setDisplayName(s)
+                                        .addLore("§e" + I18n.as("banscmd.show.lore"))
                                         .toItemStack()) {
                                     @Override
                                     public void ClickAction(ClickType type, Player u, ItemStack itemStack) {
@@ -171,8 +174,9 @@ public class BansCommand extends Command {
                         DemoGUI wh = new DemoGUI(I18n.as("banscmd.show.entity"));
                         List<String> old = BanConfig.ENTITY.getEntity();
                         for (String s : BanConfig.ENTITY.getEntity()) {
-                            wh.addItem(new GUIItem(new ItemStackFactory(ItemAPI.getEggMaterial(EntityAPI.entityType(s)))
+                            wh.addItem(new GUIItem(new ItemStackFactory(ItemAPI.getEggMaterial(EntityAPI.getType(s)))
                                     .setDisplayName(s)
+                                    .addLore("§e" + I18n.as("banscmd.show.lore"))
                                     .toItemStack()) {
                                 @Override
                                 public void ClickAction(ClickType type, Player u, ItemStack itemStack) {
@@ -194,6 +198,7 @@ public class BansCommand extends Command {
                         for (String s : BanConfig.ENCHANTMENT.getEnchantment()) {
                             wh.addItem(new GUIItem(new ItemStackFactory(Material.ENCHANTED_BOOK)
                                     .setDisplayName(s)
+                                    .addLore("§e" + I18n.as("banscmd.show.lore"))
                                     .setEnchantment(ItemAPI.getEnchantmentByKey(s))
                                     .toItemStack()) {
                                 @Override
@@ -215,7 +220,8 @@ public class BansCommand extends Command {
                         return false;
                     }
                 }
-            } case "setmessage" -> {
+            }
+            case "setmessage" -> {
                 if (args.length < 2) {
                     sender.sendMessage(ChatColor.RED + usageMessage);
                     return false;

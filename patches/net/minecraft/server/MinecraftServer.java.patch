@@ -1,6 +1,6 @@
 --- a/net/minecraft/server/MinecraftServer.java
 +++ b/net/minecraft/server/MinecraftServer.java
-@@ -1,16 +_,25 @@
+@@ -1,16 +_,26 @@
  package net.minecraft.server;
  
 +import com.mohistmc.youer.neoforge.NeoForgeInjectBukkit;
@@ -16,6 +16,7 @@
 +import io.papermc.paper.plugin.lifecycle.event.LifecycleEventRunner;
 +import io.papermc.paper.plugin.lifecycle.event.registrar.ReloadableRegistrarEvent;
 +import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
++import java.util.ArrayList;
 +import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
  import com.mojang.authlib.GameProfile;
  import com.mojang.authlib.GameProfileRepository;
@@ -80,7 +81,7 @@
  import net.minecraft.world.entity.ai.village.VillageSiege;
  import net.minecraft.world.entity.npc.CatSpawner;
  import net.minecraft.world.entity.npc.WanderingTraderSpawner;
-@@ -161,14 +_,39 @@
+@@ -161,14 +_,40 @@
  import net.minecraft.world.level.storage.LevelResource;
  import net.minecraft.world.level.storage.LevelStorageSource;
  import net.minecraft.world.level.storage.PlayerDataStorage;
@@ -89,6 +90,7 @@
  import net.minecraft.world.level.storage.WorldData;
  import net.minecraft.world.phys.Vec2;
  import net.minecraft.world.phys.Vec3;
++import net.minecraft.world.scores.PlayerTeam;
 +import net.neoforged.neoforge.common.CommonHooks;
 +import net.neoforged.neoforge.common.NeoForge;
 +import net.neoforged.neoforge.common.world.chunk.ForcedChunkManager;
@@ -154,7 +156,7 @@
      @Nullable
      private KeyPair keyPair;
      @Nullable
-@@ -254,18 +_,40 @@
+@@ -254,18 +_,46 @@
      public final Executor executor;
      @Nullable
      private String serverId;
@@ -173,6 +175,7 @@
 +    public OptionSet options;
 +    public ConsoleCommandSender console;
 +    public static int currentTick; // Paper - improve tick loop
++    public static final long startTimeMillis = System.currentTimeMillis();
 +    public Queue<Runnable> processQueue = new ConcurrentLinkedQueue<Runnable>();
 +    public int autosavePeriod;
 +    public boolean forceTicks;
@@ -187,8 +190,12 @@
 +    public final double[] recentTps = new double[ 3 ];
 +    // Spigot end
 +    public final io.papermc.paper.configuration.PaperConfigurations paperConfigurations; // Paper - add paper configuration files
++    public boolean isIteratingOverLevels = false; // Paper - Throw exception on world create while being ticked
++    public boolean lagging = false; // Purpur
 +    public volatile Thread shutdownThread; // Paper
 +    public volatile boolean abnormalExit = false; // Paper
++    public static final long SERVER_INIT = System.nanoTime(); // Paper - Lag compensation
++    public gg.pufferfish.pufferfish.util.AsyncExecutor mobSpawnExecutor = new gg.pufferfish.pufferfish.util.AsyncExecutor("MobSpawning"); // Pufferfish - optimize mob spawning
  
      public static <S extends MinecraftServer> S spin(Function<Thread, S> p_129873_) {
          AtomicReference<S> atomicreference = new AtomicReference<>();
@@ -196,6 +203,7 @@
 -        thread.setUncaughtExceptionHandler((p_177909_, p_177910_) -> LOGGER.error("Uncaught exception in server thread", p_177910_));
 +        Thread thread = new ca.spottedleaf.moonrise.common.util.TickThread(() -> atomicreference.get().runServer(), "Server thread");
 +        thread.setUncaughtExceptionHandler((p_177909_, p_177910_) -> LOGGER.error(I18n.as("minecraftserver.1"), p_177910_));
++        thread.setPriority(Thread.NORM_PRIORITY+2); // Paper - Perf: Boost priority
          if (Runtime.getRuntime().availableProcessors() > 4) {
              thread.setPriority(8);
          }
@@ -366,7 +374,7 @@
                  ServerLevel serverlevel1 = new ServerLevel(
                      this,
                      this.executor,
-@@ -419,12 +_,22 @@
+@@ -419,12 +_,43 @@
                      false,
                      randomsequences
                  );
@@ -379,6 +387,27 @@
  
          worldborder.applySettings(serverleveldata.getWorldBorder());
 +        MohistPlugin.init(); // Youer init mohist plugins
++
++        // Paper start - Configurable player collision; Handle collideRule team for player collision toggle
++        final ServerScoreboard scoreboard = this.getScoreboard();
++        final Collection<String> toRemove = new ArrayList<>();
++        for (PlayerTeam team : scoreboard.getPlayerTeams()) {
++            if (team.getName().startsWith("collideRule_")) {
++                String name = team.getName();
++                toRemove.add(name);
++            }
++        }
++        for (String teamName : toRemove) {
++            scoreboard.removePlayerTeam(scoreboard.getPlayerTeam(teamName)); // Clean up after ourselves
++        }
++
++        if (!io.papermc.paper.configuration.GlobalConfiguration.get().collisions.enablePlayerCollisions) {
++            this.getPlayerList().collideRuleTeamName = org.apache.commons.lang3.StringUtils.left("collideRule_" + java.util.concurrent.ThreadLocalRandom.current().nextInt(), 16);
++            net.minecraft.world.scores.PlayerTeam collideTeam = scoreboard.addPlayerTeam(this.getPlayerList().collideRuleTeamName);
++            collideTeam.setSeeFriendlyInvisibles(false); // Because we want to mimic them not being on a team at all
++        }
++        // Paper end - Configurable player collision
++
 +        this.server.enablePlugins(PluginLoadOrder.POSTWORLD);
 +        if (io.papermc.paper.plugin.PluginInitializerManager.instance().pluginRemapper != null) io.papermc.paper.plugin.PluginInitializerManager.instance().pluginRemapper.pluginsEnabled(); // Paper - Remap plugins
 +        io.papermc.paper.command.brigadier.PaperCommands.INSTANCE.setValid(); // Paper - reset invalid state for event fire below
@@ -610,7 +639,7 @@
                  }
              }
          }
-@@ -633,8 +_,26 @@
+@@ -633,8 +_,28 @@
          try {
              this.storageSource.close();
          } catch (IOException ioexception) {
@@ -634,12 +663,14 @@
 +            net.minecrell.terminalconsole.TerminalConsoleAppender.close(); // Paper - Use TerminalConsoleAppender
 +        } catch (final Exception ignored) {
 +        }
++        io.papermc.paper.log.CustomLogManager.forceReset(); // Paper - Reset loggers after shutdown
++        ServerLifecycleHooks.handleServerStopped(this); // Youer
 +        this.onServerExit();
 +        // Paper end - Improved watchdog support
      }
  
      public String getLocalIp() {
-@@ -650,26 +_,104 @@
+@@ -650,26 +_,105 @@
      }
  
      public void halt(boolean p_129884_) {
@@ -647,6 +678,7 @@
 +        this.safeShutdown(p_129884_, false);
 +    }
 +    public void safeShutdown(boolean p_129884_, boolean isRestarting) {
++        org.purpurmc.purpur.task.BossBarTask.stopAll(); // Purpur
 +        this.isRestarting = isRestarting;
 +        this.hasLoggedStop = true; // Paper - Debugging
 +        if (isDebugging()) io.papermc.paper.util.TraceUtil.dumpTraceForThread("Server stopped"); // Paper - Debugging
@@ -749,7 +781,7 @@
              while (this.running) {
                  long i;
                  if (!this.isPaused() && this.tickRateManager.isSprinting() && this.tickRateManager.checkShouldSprintThisTick()) {
-@@ -682,18 +_,39 @@
+@@ -682,18 +_,40 @@
                      if (k > OVERLOADED_THRESHOLD_NANOS + 20L * i
                          && this.nextTickTimeNanos - this.lastOverloadWarningNanos >= OVERLOADED_WARNING_INTERVAL_NANOS + 100L * i) {
                          long j = k / i;
@@ -775,6 +807,7 @@
 +                    this.recentTps[0] = tps1.getAverage();
 +                    this.recentTps[1] = tps5.getAverage();
 +                    this.recentTps[2] = tps15.getAverage();
++                    lagging = recentTps[0] < org.purpurmc.purpur.PurpurConfig.laggingThreshold; // Purpur
 +                    tickSection = currentTime;
 +                }
 +                // Spigot end
@@ -791,7 +824,20 @@
                  this.nextTickTimeNanos += i;
                  this.startMetricsRecordingTick();
                  this.profiler.push("tick");
-@@ -714,30 +_,39 @@
+@@ -701,6 +_,12 @@
+                 this.profiler.popPush("nextTickWait");
+                 this.mayHaveDelayedTasks = true;
+                 this.delayedTasksMaxNextTickTimeNanos = Math.max(Util.getNanos() + i, this.nextTickTimeNanos);
++                // Pufferfish start - tps catchup
++                if (!org.purpurmc.purpur.PurpurConfig.tpsCatchup || !gg.pufferfish.pufferfish.PufferfishConfig.tpsCatchup) { // Purpur
++                    this.nextTickTimeNanos = currentTime + i;
++                    this.delayedTasksMaxNextTickTimeNanos = nextTickTimeNanos;
++                }
++                // Pufferfish end
+                 this.startMeasuringTaskExecutionTime();
+                 this.waitUntilNextTick();
+                 this.finishMeasuringTaskExecutionTime();
+@@ -714,30 +_,37 @@
                  this.isReady = true;
                  JvmProfiler.INSTANCE.onServerTick(this.smoothedTickTimeMillis);
              }
@@ -830,9 +876,8 @@
                  if (this.services.profileCache() != null) {
                      this.services.profileCache().clearExecutor();
                  }
- 
+-
 -                this.onServerExit();
-+                ServerLifecycleHooks.handleServerStopped(this);
              }
          }
      }
@@ -891,6 +936,25 @@
 +        }
 +        // Paper end
          return new TickTask(this.tickCount, p_129852_);
+     }
+ 
+@@ -844,15 +_,16 @@
+         if (super.pollTask()) {
+             return true;
+         } else {
++            boolean ret = false; // Paper - force execution of all worlds, do not just bias the first
+             if (this.tickRateManager.isSprinting() || this.haveTime()) {
+                 for (ServerLevel serverlevel : this.getAllLevels()) {
+                     if (serverlevel.getChunkSource().pollTask()) {
+-                        return true;
++                        ret = true; // Paper - force execution of all worlds, do not just bias the first
+                     }
+                 }
+             }
+ 
+-            return false;
++            return ret; // Paper - force execution of all worlds, do not just bias the first
+         }
      }
  
 @@ -900,12 +_,26 @@
@@ -990,7 +1054,7 @@
              ObjectArrayList<GameProfile> objectarraylist = new ObjectArrayList<>(j);
              int k = Mth.nextInt(this.random, 0, list.size() - j);
  
-@@ -992,19 +_,63 @@
+@@ -992,19 +_,66 @@
  
      public void tickChildren(BooleanSupplier p_129954_) {
          this.getPlayerList().getPlayers().forEach(p_341570_ -> p_341570_.connection.suspendFlushing());
@@ -1038,10 +1102,13 @@
 +            }
 +        }
 +        // Paper end - Perf: Optimize time updates
++        this.isIteratingOverLevels = true; // Paper - Throw exception on world create while being ticked
 +        for(ServerLevel serverlevel : this.getWorldArray()) {
 +            long tickStart = Util.getNanos();
 +            serverlevel.hasPhysicsEvent = org.bukkit.event.block.BlockPhysicsEvent.getHandlerList().getRegisteredListeners().length > 0; // Paper - BlockPhysicsEvent
 +            serverlevel.hasEntityMoveEvent = io.papermc.paper.event.entity.EntityMoveEvent.getHandlerList().getRegisteredListeners().length > 0; // Paper - Add EntityMoveEvent
++            serverlevel.hasRidableMoveEvent = org.purpurmc.purpur.event.entity.RidableMoveEvent.getHandlerList().getRegisteredListeners().length > 0; // Purpur
++            serverlevel.updateLagCompensationTick(); // Paper - lag compensation
              this.profiler.push(() -> serverlevel + " " + serverlevel.dimension().location());
 +            /* Drop global time updates
              if (this.tickCount % 20 == 0) {
@@ -1057,7 +1124,7 @@
  
              try {
                  serverlevel.tick(p_129954_);
-@@ -1013,16 +_,18 @@
+@@ -1013,16 +_,19 @@
                  serverlevel.fillReportDetails(crashreport);
                  throw new ReportedException(crashreport);
              }
@@ -1067,6 +1134,7 @@
              this.profiler.pop();
 +            perWorldTickTimes.computeIfAbsent(serverlevel.dimension(), k -> new long[100])[this.tickCount % 100] = Util.getNanos() - tickStart;
          }
++        this.isIteratingOverLevels = false; // Paper - Throw exception on world create while being ticked
  
          this.profiler.popPush("connection");
          this.getConnection().tick();
@@ -1105,7 +1173,7 @@
      @DontObfuscate
      public String getServerModName() {
 -        return "vanilla";
-+        return io.papermc.paper.ServerBuildInfo.buildInfo().brandName(); // Paper
++        return org.purpurmc.purpur.PurpurConfig.serverModName; // Paper // Purpur
      }
  
      public SystemReport fillSystemReport(SystemReport p_177936_) {
@@ -1225,7 +1293,7 @@
      public void executeIfPossible(Runnable p_202482_) {
          if (this.isStopped()) {
 -            throw new RejectedExecutionException("Server already shutting down");
-+            throw new RejectedExecutionException(I18n.as("minecraftserver.24"));
++            throw new io.papermc.paper.util.ServerStopRejectedExecutionException(I18n.as("minecraftserver.24"));
          } else {
              super.executeIfPossible(p_202482_);
          }
@@ -1299,16 +1367,27 @@
              return configureRepositoryWithSelection(p_248681_, set, featureflagset, true);
          }
      }
-@@ -1599,7 +_,7 @@
- 
+@@ -1596,10 +_,10 @@
+         if (this.isEnforceWhitelist()) {
+             PlayerList playerlist = p_129850_.getServer().getPlayerList();
+             UserWhiteList userwhitelist = playerlist.getWhiteList();
+-
++            if (!((DedicatedServer) getServer()).getProperties().whiteList.get()) return; // Paper - whitelist not enabled
              for (ServerPlayer serverplayer : Lists.newArrayList(playerlist.getPlayers())) {
-                 if (!userwhitelist.isWhiteListed(serverplayer.getGameProfile())) {
+-                if (!userwhitelist.isWhiteListed(serverplayer.getGameProfile())) {
 -                    serverplayer.connection.disconnect(Component.translatable("multiplayer.disconnect.not_whitelisted"));
++                if (!userwhitelist.isWhiteListed(serverplayer.getGameProfile()) && !this.getPlayerList().isOp(serverplayer.getGameProfile())) { // Paper - Fix kicking ops when whitelist is reloaded (MC-171420)
 +                    serverplayer.connection.disconnect(net.kyori.adventure.text.Component.text(org.spigotmc.SpigotConfig.whitelistMessage), org.bukkit.event.player.PlayerKickEvent.Cause.WHITELIST); // Paper - use configurable message & kick event cause
                  }
              }
          }
-@@ -1712,6 +_,31 @@
+@@ -1707,11 +_,37 @@
+     }
+ 
+     public ProfilerFiller getProfiler() {
++        if (gg.pufferfish.pufferfish.PufferfishConfig.disableMethodProfiler) return net.minecraft.util.profiling.InactiveProfiler.INSTANCE;
+         return this.profiler;
+     }
  
      public abstract boolean isSingleplayerOwner(GameProfile p_129840_);
  

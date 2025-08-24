@@ -110,7 +110,16 @@
      private final Set<TagKey<Fluid>> fluidOnEyes = new HashSet<>();
      public int invulnerableTime;
      protected boolean firstTick = true;
-@@ -243,6 +_,135 @@
+@@ -231,7 +_,7 @@
+     private final Set<String> tags = Sets.newHashSet();
+     private final double[] pistonDeltas = new double[]{0.0, 0.0, 0.0};
+     private long pistonDeltasGameTime;
+-    private EntityDimensions dimensions;
++    protected EntityDimensions dimensions;  // Purpur - private -> protected
+     private float eyeHeight;
+     public boolean isInPowderSnow;
+     public boolean wasInPowderSnow;
+@@ -243,6 +_,158 @@
      public boolean hasVisualFire;
      @Nullable
      private BlockState inBlockState = null;
@@ -201,6 +210,7 @@
 +    private UUID originWorld;
 +    public boolean freezeLocked = false; // Paper - Freeze Tick Lock API
 +    public boolean fixedPose = false; // Paper - Expand Pose API
++    public @Nullable Boolean immuneToFire = null; // Purpur - Fire immune API
 +
 +    public void setOrigin(@javax.annotation.Nonnull Location location) {
 +        this.origin = location.toVector();
@@ -243,6 +253,28 @@
 +        }
 +    }
 +    // Paper end - optimise entity tracker
++
++    // Purpur start
++    public boolean canSaveToDisk() {
++        return true;
++    }
++    // Purpur end
++
++    // Purpur start - copied from Mob - API for any mob to burn daylight
++    public boolean isSunBurnTick() {
++        if (this.level().isDay() && !this.level().isClientSide) {
++            float f = this.getLightLevelDependentMagicValue();
++            BlockPos blockposition = BlockPos.containing(this.getX(), this.getEyeY(), this.getZ());
++            boolean flag = this.isInWaterRainOrBubble() || this.isInPowderSnow || this.wasInPowderSnow;
++
++            if (f > 0.5F && this.random.nextFloat() * 30.0F < (f - 0.4F) * 2.0F && !flag && this.level().canSeeSky(blockposition)) {
++                return true;
++            }
++        }
++
++        return false;
++    }
++    // Purpur end - copied from Mob - API for any mob to burn daylight
  
      public Entity(EntityType<?> p_19870_, Level p_19871_) {
          this.type = p_19870_;
@@ -276,7 +308,7 @@
      }
  
      public boolean isColliding(BlockPos p_20040_, BlockState p_20041_) {
-@@ -333,6 +_,96 @@
+@@ -333,6 +_,104 @@
          this.remove(Entity.RemovalReason.DISCARDED);
      }
  
@@ -361,7 +393,15 @@
 +        org.bukkit.entity.Entity bukkitEntity = entity.getBukkitEntity();
 +        Location enter = bukkitEntity.getLocation();
 +
-+        EntityPortalEvent event = new EntityPortalEvent(bukkitEntity, enter, exit, searchRadius, true, creationRadius);
++        // Paper start
++        final org.bukkit.PortalType portalType = switch (cause) {
++            case END_PORTAL -> org.bukkit.PortalType.ENDER;
++            case NETHER_PORTAL -> org.bukkit.PortalType.NETHER;
++            case END_GATEWAY -> org.bukkit.PortalType.END_GATEWAY; // not actually used yet
++            default -> org.bukkit.PortalType.CUSTOM;
++        };
++        EntityPortalEvent event = new EntityPortalEvent(bukkitEntity, enter, exit, searchRadius, true, creationRadius, portalType);
++        // Paper end
 +        event.getEntity().getServer().getPluginManager().callEvent(event);
 +        if (event.isCancelled() || event.getTo() == null || event.getTo().getWorld() == null || !entity.isAlive()) {
 +            return null;
@@ -383,7 +423,7 @@
 +            return;
 +        }
 +        // Paper start - Don't fire sync event during generation
-+        if (!this.generation) {
++        if (!AsyncCatcher.catchAsync() && !this.generation) {
 +            this.level.getCraftServer().getPluginManager().callEvent(new EntityPoseChangeEvent(this.getBukkitEntity(), org.bukkit.entity.Pose.values()[p_20125_.ordinal()]));
 +        }
 +        // Paper end - Don't fire sync event during generation
@@ -644,6 +684,15 @@
          this.playSound(soundtype.getStepSound(), soundtype.getVolume() * 0.15F, soundtype.getPitch());
      }
  
+@@ -1188,7 +_,7 @@
+     }
+ 
+     public boolean fireImmune() {
+-        return this.getType().fireImmune();
++        return this.immuneToFire != null ? immuneToFire : this.getType().fireImmune(); // Purpur - add fire immune API
+     }
+ 
+     public boolean causeFallDamage(float p_146828_, float p_146829_, DamageSource p_146830_) {
 @@ -1209,13 +_,13 @@
          return this.wasTouchingWater;
      }
@@ -914,7 +963,7 @@
              this.addAdditionalSaveData(p_20241_);
              if (this.isVehicle()) {
                  ListTag listtag1 = new ListTag();
-@@ -1720,6 +_,27 @@
+@@ -1720,6 +_,32 @@
                  }
              }
  
@@ -939,6 +988,11 @@
 +                p_20241_.putBoolean("Paper.FreezeLock", true);
 +            }
 +            // Paper end
++            // Purpur start
++            if (immuneToFire != null) {
++                p_20241_.putBoolean("Purpur.FireImmune", immuneToFire);
++            }
++            // Purpur end
              return p_20241_;
          } catch (Throwable throwable) {
              CrashReport crashreport = CrashReport.forThrowable(throwable, "Saving entity NBT");
@@ -951,7 +1005,7 @@
                  if (p_20259_.contains("Tags", 9)) {
                      this.tags.clear();
                      ListTag listtag3 = p_20259_.getList("Tags", 8);
-@@ -1801,6 +_,84 @@
+@@ -1801,6 +_,89 @@
              } else {
                  throw new IllegalStateException("Entity has invalid rotation");
              }
@@ -1032,6 +1086,11 @@
 +                freezeLocked = p_20259_.getBoolean("Paper.FreezeLock");
 +            }
 +            // Paper end
++            // Purpur start
++            if (p_20259_.contains("Purpur.FireImmune")) {
++                immuneToFire = p_20259_.getBoolean("Purpur.FireImmune");
++            }
++            // Purpur end
 +
          } catch (Throwable throwable) {
              CrashReport crashreport = CrashReport.forThrowable(throwable, "Loading entity NBT");
@@ -1109,7 +1168,18 @@
          }
      }
  
-@@ -2054,10 +_,42 @@
+@@ -2050,14 +_,60 @@
+                 this.passengers = ImmutableList.copyOf(list);
+             }
+ 
++            // Purpur start
++            if (isRidable() && this.passengers.get(0) == p_20349_ && p_20349_ instanceof Player player) {
++                onMount(player);
++                this.rider = player;
++            }
++            // Purpur end
++
+             this.gameEvent(GameEvent.ENTITY_MOUNT, p_20349_);
          }
      }
  
@@ -1149,6 +1219,13 @@
 +                return;
 +            }
 +            // CraftBukkit end
++
++            // Purpur start
++            if (this.rider != null && this.passengers.get(0) == this.rider) {
++                onDismount(this.rider);
++                this.rider = null;
++            }
++            // Purpur end
              if (this.passengers.size() == 1 && this.passengers.get(0) == p_20352_) {
                  this.passengers = ImmutableList.of();
              } else {
@@ -1321,6 +1398,20 @@
      }
  
      public boolean isInvulnerable() {
+@@ -2535,6 +_,13 @@
+     }
+ 
+     public void restoreFrom(Entity p_20362_) {
++        // Paper start - Forward CraftEntity in teleport command
++        CraftEntity bukkitEntity = p_20362_.bukkitEntity;
++        if (bukkitEntity != null) {
++            bukkitEntity.setHandle(this);
++            this.bukkitEntity = bukkitEntity;
++        }
++        // Paper end - Forward CraftEntity in teleport command
+         CompoundTag compoundtag = p_20362_.saveWithoutId(new CompoundTag());
+         compoundtag.remove("Dimension");
+         this.load(compoundtag);
 @@ -2544,6 +_,7 @@
  
      @Nullable
@@ -1329,15 +1420,7 @@
          if (this.level() instanceof ServerLevel serverlevel && !this.isRemoved()) {
              ServerLevel serverlevel1 = p_350951_.newLevel();
              List<Entity> list = this.getPassengers();
-@@ -2563,11 +_,15 @@
-                 if (this != entity2) {
-                     entity2.restoreFrom(this);
-                     this.removeAfterChangingDimensions();
-+                    // CraftBukkit start - Forward the CraftEntity to the new entity
-+                    this.getBukkitEntity().setHandle(entity2);
-+                    entity2.bukkitEntity = this.getBukkitEntity();
-+                    // CraftBukkit end
-                 }
+@@ -2567,7 +_,7 @@
  
                  entity2.moveTo(p_350951_.pos().x, p_350951_.pos().y, p_350951_.pos().z, p_350951_.yRot(), entity2.getXRot());
                  entity2.setDeltaMovement(p_350951_.speed());
@@ -1432,6 +1515,27 @@
      }
  
      public final float getEyeHeight(Pose p_20237_) {
+@@ -2872,6 +_,20 @@
+         return SlotAccess.NULL;
+     }
+ 
++    // Purpur Start
++    public void sendMiniMessage(@Nullable String message) {
++        if (message != null && !message.isEmpty()) {
++            this.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(message));
++        }
++    }
++
++    public void sendMessage(@Nullable net.kyori.adventure.text.Component message) {
++        if (message != null) {
++            this.sendSystemMessage(io.papermc.paper.adventure.PaperAdventure.asVanilla(message));
++        }
++    }
++    // Purpur end
++
+     @Override
+     public void sendSystemMessage(Component p_216998_) {
+     }
 @@ -2896,8 +_,14 @@
      public void startSeenByPlayer(ServerPlayer p_20119_) {
      }
@@ -1770,7 +1874,7 @@
          this.level = p_285201_;
      }
  
-@@ -3550,4 +_,14 @@
+@@ -3550,4 +_,54 @@
              return this.save;
          }
      }
@@ -1784,4 +1888,44 @@
 +        return ((net.minecraft.server.level.ServerChunkCache) level.getChunkSource()).isPositionTicking(this);
 +    }
 +    // Paper end - Expose entity id counter
++    // Purpur start
++    @Nullable
++    private Player rider = null;
++
++    @Nullable
++    public Player getRider() {
++        return rider;
++    }
++
++    public boolean isRidable() {
++        return false;
++    }
++
++    public boolean isControllable() {
++        return true;
++    }
++
++    public void onMount(Player rider) {
++        if (this instanceof Mob) {
++            ((Mob) this).setTargetCB(null, null, false);
++            ((Mob) this).getNavigation().stop();
++        }
++        rider.setJumping(false); // fixes jump on mount
++    }
++
++    public void onDismount(Player player) {
++    }
++
++    public boolean onSpacebar() {
++        return false;
++    }
++
++    public boolean onClick(InteractionHand hand) {
++        return false;
++    }
++
++    public boolean processClick(InteractionHand hand) {
++        return false;
++    }
++    // Purpur end
  }

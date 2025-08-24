@@ -314,8 +314,10 @@ public final class CraftServer implements Server {
     private final List<CraftPlayer> playerView;
     public int reloadCount;
     public Set<String> activeCompatibilities = Collections.emptySet();
+    public static Exception excessiveVelEx; // Paper - Velocity warnings
     private final io.papermc.paper.datapack.PaperDatapackManager datapackManager; // Paper
     private final io.papermc.paper.potion.PaperPotionBrewer potionBrewer; // Paper - Custom Potion Mixes
+    private final io.papermc.paper.logging.SysoutCatcher sysoutCatcher = new io.papermc.paper.logging.SysoutCatcher(); // Paper
 
     // Paper start - Folia region threading API
     private final io.papermc.paper.threadedregions.scheduler.FallbackRegionScheduler regionizedScheduler = new io.papermc.paper.threadedregions.scheduler.FallbackRegionScheduler();
@@ -434,7 +436,11 @@ public final class CraftServer implements Server {
         }
         this.commandsConfiguration = YamlConfiguration.loadConfiguration(this.getCommandsConfigFile());
         this.commandsConfiguration.options().copyDefaults(true);
-        this.commandsConfiguration.setDefaults(YamlConfiguration.loadConfiguration(new InputStreamReader(this.getClass().getClassLoader().getResourceAsStream("configurations/commands.yml"), Charsets.UTF_8)));
+        // Paper start - don't enforce icanhasbukkit default if alias block exists
+        final YamlConfiguration commandsDefaults = YamlConfiguration.loadConfiguration(new InputStreamReader(this.getClass().getClassLoader().getResourceAsStream("configurations/commands.yml"), Charsets.UTF_8));
+        if (this.commandsConfiguration.contains("aliases")) commandsDefaults.set("aliases", null);
+        this.commandsConfiguration.setDefaults(commandsDefaults);
+        // Paper end - don't enforce icanhasbukkit default if alias block exists
         this.saveCommandsConfig();
 
         // Migrate aliases from old file and add previously implicit $1- to pass all arguments
@@ -1003,6 +1009,11 @@ public final class CraftServer implements Server {
         return new HashSet<>(worlds.keySet());
     }
 
+    @Override
+    public boolean isTickingWorlds() {
+        return console.isIteratingOverLevels;
+    }
+
     public DedicatedPlayerList getHandle() {
         return this.playerList;
     }
@@ -1053,7 +1064,7 @@ public final class CraftServer implements Server {
         Command target = this.commandMap.getCommand(args[0].toLowerCase(java.util.Locale.ENGLISH));
 
         try {
-            commands.performCommand(results, commandLine, commandLine, true);
+            commands.performCommandCB(results, commandLine, commandLine, true);
         } catch (CommandException ex) {
             this.pluginManager.callEvent(new io.papermc.paper.event.server.ServerExceptionEvent(new io.papermc.paper.exception.ServerCommandException(ex, target, sender, args))); // Paper
             //target.timings.stopTiming(); // Spigot // Paper
@@ -1132,6 +1143,19 @@ public final class CraftServer implements Server {
     public void reloadData() {
         ReloadCommand.reload(this.console);
     }
+
+
+    // Paper start - API for updating recipes on clients
+    @Override
+    public void updateResources() {
+        this.playerList.reloadResources();
+    }
+
+    @Override
+    public void updateRecipes() {
+        this.playerList.reloadRecipeData();
+    }
+    // Paper end - API for updating recipes on clients
 
     private void loadIcon() {
         this.icon = new CraftIconCache(null);
@@ -1341,11 +1365,11 @@ public final class CraftServer implements Server {
         } else if (name.equals(levelName + "_the_end")) {
             worldKey = net.minecraft.world.level.Level.END;
         } else {
-            worldKey = ResourceKey.create(Registries.DIMENSION, ResourceLocation.withDefaultNamespace(name.toLowerCase(java.util.Locale.ENGLISH)));
+            worldKey = ResourceKey.create(Registries.DIMENSION, ResourceLocation.fromNamespaceAndPath(creator.key().namespace(), creator.key().value()));
         }
 
         // If set to not keep spawn in memory (changed from default) then adjust rule accordingly
-        if (!creator.keepSpawnInMemory()) {
+        if (creator.keepSpawnLoaded() == net.kyori.adventure.util.TriState.FALSE) { // Paper
             worlddata.getGameRules().getRule(GameRules.RULE_SPAWN_CHUNK_RADIUS).set(0, null);
         }
         net.minecraft.world.level.Level.craftWorldData(creator.environment(), generator, biomeProvider);
@@ -1407,7 +1431,7 @@ public final class CraftServer implements Server {
 
         try {
             if (save) {
-                handle.save(null, true, true);
+                handle.save(null, true, false); // Paper - Fix saving in unloadWorld
             }
 
             handle.getChunkSource().close(save);
@@ -1454,6 +1478,15 @@ public final class CraftServer implements Server {
         return null;
     }
 
+    // Paper start
+    @Override
+    public World getWorld(net.kyori.adventure.key.Key worldKey) {
+        ServerLevel worldServer = console.getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, io.papermc.paper.adventure.PaperAdventure.asVanilla(worldKey)));
+        if (worldServer == null) return null;
+        return worldServer.getWorld();
+    }
+    // Paper end
+
     public void addWorld(World world) {
         // Check if a World already exists with the UID.
         if (this.getWorld(world.getUID()) != null) {
@@ -1492,6 +1525,13 @@ public final class CraftServer implements Server {
 
     @Override
     public boolean addRecipe(Recipe recipe) {
+        // Paper start - API for updating recipes on clients
+        return this.addRecipe(recipe, false);
+    }
+
+    @Override
+    public boolean addRecipe(Recipe recipe, boolean resendRecipes) {
+        // Paper end - API for updating recipes on clients
         CraftRecipe toAdd;
         if (recipe instanceof CraftRecipe) {
             toAdd = (CraftRecipe) recipe;
@@ -1521,8 +1561,62 @@ public final class CraftServer implements Server {
             }
         }
         toAdd.addToCraftingManager();
+        // Paper start - API for updating recipes on clients
+        if (resendRecipes) {
+            this.playerList.reloadRecipeData();
+        }
+        // Paper end - API for updating recipes on clients
         return true;
     }
+
+    // Purpur Start
+    @Override
+    public void addFuel(org.bukkit.Material material, int burnTime) {
+        Preconditions.checkArgument(burnTime > 0, "BurnTime must be greater than 0");
+        net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity.addFuel(net.minecraft.world.item.ItemStack.fromBukkitCopy(new ItemStack(material)), burnTime);
+    }
+
+    @Override
+    public void removeFuel(org.bukkit.Material material) {
+        net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity.removeFuel(net.minecraft.world.item.ItemStack.fromBukkitCopy(new ItemStack(material)));
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration) {
+        sendBlockHighlight(location, duration, "", 0x6400FF00);
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, int argb) {
+        sendBlockHighlight(location, duration, "", argb);
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, String text) {
+        sendBlockHighlight(location, duration, text, 0x6400FF00);
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, String text, int argb) {
+        this.worlds.forEach((name, world) -> world.sendBlockHighlight(location, duration, text, argb));
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, org.bukkit.Color color, int transparency) {
+        sendBlockHighlight(location, duration, "", color, transparency);
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, String text, org.bukkit.Color color, int transparency) {
+        if (transparency < 0 || transparency > 255) throw new IllegalArgumentException("transparency is outside of 0-255 range");
+        sendBlockHighlight(location, duration, text, transparency << 24 | color.asRGB());
+    }
+
+    @Override
+    public void clearBlockHighlights() {
+        this.worlds.forEach((name, world) -> clearBlockHighlights());
+    }
+    // Purpur End
 
     @Override
     public List<Recipe> getRecipesFor(ItemStack result) {
@@ -1701,10 +1795,23 @@ public final class CraftServer implements Server {
 
     @Override
     public boolean removeRecipe(NamespacedKey recipeKey) {
+        // Paper start - API for updating recipes on clients
+        return this.removeRecipe(recipeKey, false);
+    }
+
+    @Override
+    public boolean removeRecipe(NamespacedKey recipeKey, boolean resendRecipes) {
+        // Paper end - API for updating recipes on clients
         Preconditions.checkArgument(recipeKey != null, "recipeKey == null");
 
         ResourceLocation mcKey = CraftNamespacedKey.toMinecraft(recipeKey);
-        return this.getServer().getRecipeManager().removeRecipe(mcKey);
+        // Paper start - resend recipes on successful removal
+        boolean removed = this.getServer().getRecipeManager().removeRecipe(mcKey);
+        if (removed && resendRecipes) {
+            this.playerList.reloadRecipeData();
+        }
+        return removed;
+        // Paper end
     }
 
     @Override
@@ -2034,6 +2141,28 @@ public final class CraftServer implements Server {
 
         return result;
     }
+
+    // Paper start
+    @Override
+    @Nullable
+    public OfflinePlayer getOfflinePlayerIfCached(String name) {
+        Preconditions.checkArgument(name != null, "Name cannot be null");
+        Preconditions.checkArgument(!name.isEmpty(), "Name cannot be empty");
+
+        OfflinePlayer result = getPlayerExact(name);
+        if (result == null) {
+            GameProfile profile = console.getProfileCache().getProfileIfCached(name);
+
+            if (profile != null) {
+                result = getOfflinePlayer(profile);
+            }
+        } else {
+            offlinePlayers.remove(result.getUniqueId());
+        }
+
+        return result;
+    }
+    // Paper end
 
     @Override
     public OfflinePlayer getOfflinePlayer(UUID id) {
@@ -2389,12 +2518,12 @@ public final class CraftServer implements Server {
 
     @Override
     public String getPermissionMessage() {
-        return net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().serialize(Component.text("I'm sorry, but you do not have permission to perform this command. Please contact the server administrators if you believe that this is in error.", NamedTextColor.RED));
+        return net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().serialize(io.papermc.paper.configuration.GlobalConfiguration.get().messages.noPermission);
     }
 
     @Override
     public net.kyori.adventure.text.Component permissionMessage() {
-        return Component.text("I'm sorry, but you do not have permission to perform this command. Please contact the server administrators if you believe that this is in error.", NamedTextColor.RED);
+        return io.papermc.paper.configuration.GlobalConfiguration.get().messages.noPermission;
     }
 
     @Override
@@ -2528,7 +2657,7 @@ public final class CraftServer implements Server {
             offers = this.tabCompleteChat(player, message);
         }
 
-        TabCompleteEvent tabEvent = new TabCompleteEvent(player, message, offers);
+        TabCompleteEvent tabEvent = new TabCompleteEvent(player, message, offers, message.startsWith("/") || forceCommand, pos != null ? io.papermc.paper.util.MCUtil.toLocation(((CraftWorld) player.getWorld()).getHandle(), BlockPos.containing(pos)) : null); // Paper - AsyncTabCompleteEvent
         this.getPluginManager().callEvent(tabEvent);
 
         return tabEvent.isCancelled() ? Collections.EMPTY_LIST : tabEvent.getCompletions();
@@ -2976,6 +3105,36 @@ public final class CraftServer implements Server {
         }
 
         @Override
+        public YamlConfiguration getBukkitConfig()
+        {
+            return configuration;
+        }
+
+        @Override
+        public YamlConfiguration getSpigotConfig()
+        {
+            return org.spigotmc.SpigotConfig.config;
+        }
+
+        @Override
+        public YamlConfiguration getPaperConfig()
+        {
+            return CraftServer.this.console.paperConfigurations.createLegacyObject(CraftServer.this.console);
+        }
+
+        // Purpur start
+        @Override
+        public YamlConfiguration getPurpurConfig() {
+            return org.purpurmc.purpur.PurpurConfig.config;
+        }
+
+        @Override
+        public java.util.Properties getServerProperties() {
+            return getProperties().properties;
+        }
+        // Purpur end
+
+        @Override
         public void restart() {
             org.spigotmc.RestartCommand.restart();
         }
@@ -3035,4 +3194,16 @@ public final class CraftServer implements Server {
     public io.papermc.paper.potion.PaperPotionBrewer getPotionBrewer() {
         return this.potionBrewer;
     }
+
+    // Purpur start
+    @Override
+    public String getServerName() {
+        return this.getProperties().serverName;
+    }
+
+    @Override
+    public boolean isLagging() {
+        return getServer().lagging;
+    }
+    // Purpur end
 }

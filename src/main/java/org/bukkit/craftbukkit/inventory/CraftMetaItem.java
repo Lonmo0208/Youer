@@ -746,7 +746,7 @@ class CraftMetaItem implements ItemMeta, Damageable, Repairable, BlockDataMeta {
 
             AttributeModifier attribMod = CraftAttributeInstance.convert(nmsModifier);
 
-            String attributeName = entry.getString(CraftMetaItem.ATTRIBUTES_IDENTIFIER.NBT);
+            String attributeName = org.bukkit.craftbukkit.attribute.CraftAttributeMap.convertIfNeeded(entry.getString(CraftMetaItem.ATTRIBUTES_IDENTIFIER.NBT)); // Paper
             if (attributeName == null || attributeName.isEmpty()) {
                 continue;
             }
@@ -1468,7 +1468,7 @@ class CraftMetaItem implements ItemMeta, Damageable, Repairable, BlockDataMeta {
         Preconditions.checkNotNull(modifier, "AttributeModifier cannot be null");
         if (this.attributeModifiers != null) { // Paper
             for (Map.Entry<Attribute, AttributeModifier> entry : this.attributeModifiers.entries()) {
-                if (entry.getValue().getKey().equals(modifier.getKey())) return false;
+                Preconditions.checkArgument(!(entry.getValue().getKey().equals(modifier.getKey()) && entry.getKey() == attribute), "Cannot register AttributeModifier. Modifier is already applied! %s", modifier); // Paper - attribute modifiers with same namespaced key but on different attributes are fine
             }
         } // Paper
         this.checkAttributeList(); // Paper - moved down
@@ -2032,25 +2032,26 @@ class CraftMetaItem implements ItemMeta, Damageable, Repairable, BlockDataMeta {
             // Paper start - support components
             if(object instanceof net.md_5.bungee.api.chat.BaseComponent[] baseComponentArr) {
                 addTo.add(CraftChatMessage.fromJSON(net.md_5.bungee.chat.ComponentSerializer.toString(baseComponentArr)));
-            } else
-                // Paper end
-            if (!(object instanceof String)) {
-                if (object != null) {
-                    // SPIGOT-7399: Null check via if is important,
-                    // otherwise object.getClass().getName() could throw an error for a valid argument -> when it is null which is valid,
-                    // when using Preconditions
-                    throw new IllegalArgumentException(addFrom + " cannot contain non-string " + object.getClass().getName());
-                }
-
-                addTo.add(Component.empty());
             } else {
-                String entry = object.toString();
-                Component component = (possiblyJsonInput) ? CraftChatMessage.fromJSONOrString(entry) : CraftChatMessage.fromStringOrNull(entry);
+                // Paper end
+                if (!(object instanceof String)) {
+                    if (object != null) {
+                        // SPIGOT-7399: Null check via if is important,
+                        // otherwise object.getClass().getName() could throw an error for a valid argument -> when it is null which is valid,
+                        // when using Preconditions
+                        throw new IllegalArgumentException(addFrom + " cannot contain non-string " + object.getClass().getName());
+                    }
 
-                if (component != null) {
-                    addTo.add(component);
-                } else {
                     addTo.add(Component.empty());
+                } else {
+                    String entry = object.toString();
+                    Component component = (possiblyJsonInput) ? CraftChatMessage.fromJSONOrString(entry) : CraftChatMessage.fromStringOrNull(entry);
+
+                    if (component != null) {
+                        addTo.add(component);
+                    } else {
+                        addTo.add(Component.empty());
+                    }
                 }
             }
         }

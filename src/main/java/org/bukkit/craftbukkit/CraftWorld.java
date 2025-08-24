@@ -209,6 +209,38 @@ public class CraftWorld extends CraftRegionAccessor implements World {
     }
     // Paper end
 
+    // Paper start - Provide fast information methods
+    @Override
+    public int getEntityCount() {
+        int ret = 0;
+        for (net.minecraft.world.entity.Entity entity : world.getEntities().getAll()) {
+            if (entity.isChunkLoaded()) {
+                ++ret;
+            }
+        }
+        return ret;
+    }
+
+    @Override
+    public int getTileEntityCount() {
+        return this.world.blockEntityTickers.size();
+    }
+
+    @Override
+    public int getTickableTileEntityCount() {
+        return world.blockEntityTickers.size();
+    }
+
+    @Override
+    public int getChunkCount() {
+        return this.world.getChunkSource().getLoadedChunksCount();
+    }
+
+    @Override
+    public int getPlayerCount() {
+        return world.players().size();
+    }
+
     private static final Random rand = new Random();
 
     public CraftWorld(ServerLevel world, ChunkGenerator gen, BiomeProvider biomeProvider, Environment env) {
@@ -217,14 +249,6 @@ public class CraftWorld extends CraftRegionAccessor implements World {
         this.biomeProvider = biomeProvider;
 
         this.environment = env;
-        // Paper start - per world spawn limits
-        for (SpawnCategory spawnCategory : SpawnCategory.values()) {
-            if (CraftSpawnCategory.isValidForLimits(spawnCategory)) {
-                setSpawnLimit(spawnCategory, this.world.paperConfig().entities.spawning.spawnLimits.getInt(CraftSpawnCategory.toNMS(spawnCategory)));
-            }
-        }
-        // Paper end - per world spawn limits
-
         // Paper start - per world void damage height
         this.voidDamageEnabled = this.world.paperConfig().environment.voidDamageAmount.enabled();
         this.voidDamageMinBuildHeightOffset = this.world.paperConfig().environment.voidDamageMinBuildHeightOffset;
@@ -254,12 +278,14 @@ public class CraftWorld extends CraftRegionAccessor implements World {
     @Override
     public boolean setSpawnLocation(int x, int y, int z, float angle) {
         try {
-            Location previousLocation = this.getSpawnLocation();
-            this.world.levelData.setSpawn(new BlockPos(x, y, z), angle);
+            // Location previousLocation = this.getSpawnLocation(); // Paper - Call SpawnChangeEvent; moved to nms.ServerLevel
+            this.world.setDefaultSpawnPos(new BlockPos(x, y, z), angle); // Paper - use ServerLevel#setDefaultSpawnPos
 
+            // Paper start - Call SpawnChangeEvent; move to nms.ServerLevel
             // Notify anyone who's listening.
-            SpawnChangeEvent event = new SpawnChangeEvent(this, previousLocation);
-            this.server.getPluginManager().callEvent(event);
+            // SpawnChangeEvent event = new SpawnChangeEvent(this, previousLocation);
+            // server.getPluginManager().callEvent(event);
+            // Paper end - Call SpawnChangeEvent
 
             return true;
         } catch (Exception e) {
@@ -446,7 +472,8 @@ public class CraftWorld extends CraftRegionAccessor implements World {
     @Override
     public boolean loadChunk(int x, int z, boolean generate) {
         org.spigotmc.AsyncCatcher.catchOp("chunk load"); // Spigot
-        ChunkAccess chunk = this.world.getChunkSource().getChunk(x, z, generate ? ChunkStatus.FULL : ChunkStatus.EMPTY, true);
+        warnUnsafeChunk("loading a faraway chunk", x, z); // Paper
+        ChunkAccess chunk = this.world.getChunkSource().getChunk(x, z, generate || isChunkGenerated(x, z) ? ChunkStatus.FULL : ChunkStatus.EMPTY, true); // Paper
 
         // If generate = false, but the chunk already exists, we will get this back.
         if (chunk instanceof ImposterProtoChunk) {
@@ -1041,9 +1068,16 @@ public class CraftWorld extends CraftRegionAccessor implements World {
 
     @Override
     public RayTraceResult rayTraceEntities(Location start, Vector direction, double maxDistance, double raySize, Predicate<? super Entity> filter) {
+        // Paper start - Add predicate for blocks when raytracing
+        return rayTraceEntities((io.papermc.paper.math.Position) start, direction, maxDistance, raySize, filter);
+    }
+
+    public RayTraceResult rayTraceEntities(io.papermc.paper.math.Position start, Vector direction, double maxDistance, double raySize, Predicate<? super Entity> filter) {
         Preconditions.checkArgument(start != null, "Location start cannot be null");
-        Preconditions.checkArgument(this.equals(start.getWorld()), "Location start cannot be in a different world");
-        start.checkFinite();
+        Preconditions.checkArgument(!(start instanceof Location location) || this.equals(location.getWorld()), "Location start cannot be in a different world");
+        Preconditions.checkArgument(start.isFinite(), "Location start is not finite");
+        // Paper end - Add predicate for blocks when raytracing
+        Preconditions.checkArgument(start != null, "Location start cannot be null");
 
         Preconditions.checkArgument(direction != null, "Vector direction cannot be null");
         direction.checkFinite();
@@ -1093,9 +1127,18 @@ public class CraftWorld extends CraftRegionAccessor implements World {
 
     @Override
     public RayTraceResult rayTraceBlocks(Location start, Vector direction, double maxDistance, FluidCollisionMode fluidCollisionMode, boolean ignorePassableBlocks) {
+        // Paper start - Add predicate for blocks when raytracing
+        return this.rayTraceBlocks(start, direction, maxDistance, fluidCollisionMode, ignorePassableBlocks, null);
+    }
+
+    @Override
+    public RayTraceResult rayTraceBlocks(io.papermc.paper.math.Position start, Vector direction, double maxDistance, FluidCollisionMode fluidCollisionMode, boolean ignorePassableBlocks, Predicate<? super Block> canCollide) {
         Preconditions.checkArgument(start != null, "Location start cannot be null");
-        Preconditions.checkArgument(this.equals(start.getWorld()), "Location start cannot be in a different world");
-        start.checkFinite();
+        Preconditions.checkArgument(!(start instanceof Location location) || this.equals(location.getWorld()), "Location start cannot be in a different world");
+        Preconditions.checkArgument(start.isFinite(), "Location start is not finite");
+        // Paper end - Add predicate for blocks when raytracing
+
+        Preconditions.checkArgument(start != null, "Location start cannot be null");
 
         Preconditions.checkArgument(direction != null, "Vector direction cannot be null");
         direction.checkFinite();
@@ -1108,16 +1151,23 @@ public class CraftWorld extends CraftRegionAccessor implements World {
         }
 
         Vector dir = direction.clone().normalize().multiply(maxDistance);
-        Vec3 startPos = CraftLocation.toVec3D(start);
+        Vec3 startPos = io.papermc.paper.util.MCUtil.toVec3(start); // Paper - Add predicate for blocks when raytracing
         Vec3 endPos = startPos.add(dir.getX(), dir.getY(), dir.getZ());
-        HitResult nmsHitResult = this.getHandle().clip(new ClipContext(startPos, endPos, ignorePassableBlocks ? ClipContext.Block.COLLIDER : ClipContext.Block.OUTLINE, CraftFluidCollisionMode.toNMS(fluidCollisionMode), CollisionContext.empty()));
+        HitResult nmsHitResult = this.getHandle().clip(new ClipContext(startPos, endPos, ignorePassableBlocks ? ClipContext.Block.COLLIDER : ClipContext.Block.OUTLINE, CraftFluidCollisionMode.toNMS(fluidCollisionMode), CollisionContext.empty()), canCollide); // Paper - Add predicate for blocks when raytracing
 
         return CraftRayTraceResult.fromNMS(this, nmsHitResult);
     }
 
     @Override
     public RayTraceResult rayTrace(Location start, Vector direction, double maxDistance, FluidCollisionMode fluidCollisionMode, boolean ignorePassableBlocks, double raySize, Predicate<? super Entity> filter) {
-        RayTraceResult blockHit = this.rayTraceBlocks(start, direction, maxDistance, fluidCollisionMode, ignorePassableBlocks);
+        // Paper start - Add predicate for blocks when raytracing
+        return this.rayTrace(start, direction, maxDistance, fluidCollisionMode, ignorePassableBlocks, raySize, filter, null);
+    }
+
+    @Override
+    public RayTraceResult rayTrace(io.papermc.paper.math.Position start, Vector direction, double maxDistance, FluidCollisionMode fluidCollisionMode, boolean ignorePassableBlocks, double raySize, Predicate<? super Entity> filter, Predicate<? super Block> canCollide) {
+        RayTraceResult blockHit = this.rayTraceBlocks(start, direction, maxDistance, fluidCollisionMode, ignorePassableBlocks, canCollide);
+        // Paper end - Add predicate for blocks when raytracing
         Vector startVec = null;
         double blockHitDistance = maxDistance;
 
@@ -2105,6 +2155,28 @@ public class CraftWorld extends CraftRegionAccessor implements World {
         return new CraftStructureSearchResult(CraftStructure.minecraftToBukkit(found.getSecond().value()), CraftLocation.toBukkit(found.getFirst(), this));
     }
 
+    // Paper start
+    @Override
+    public double getCoordinateScale() {
+        return getHandle().dimensionType().coordinateScale();
+    }
+
+    @Override
+    public boolean isFixedTime() {
+        return getHandle().dimensionType().hasFixedTime();
+    }
+
+    @Override
+    public Collection<org.bukkit.Material> getInfiniburn() {
+        return com.google.common.collect.Sets.newHashSet(com.google.common.collect.Iterators.transform(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getTagOrEmpty(this.getHandle().dimensionType().infiniburn()).iterator(), blockHolder -> CraftBlockType.minecraftToBukkit(blockHolder.value())));
+    }
+
+    @Override
+    public void sendGameEvent(Entity sourceEntity, org.bukkit.GameEvent gameEvent, Vector position) {
+        getHandle().gameEvent(sourceEntity != null ? ((CraftEntity) sourceEntity).getHandle(): null, net.minecraft.core.registries.BuiltInRegistries.GAME_EVENT.getHolder(org.bukkit.craftbukkit.util.CraftNamespacedKey.toMinecraft(gameEvent.getKey())).orElseThrow(), org.bukkit.craftbukkit.util.CraftVector.toBlockPos(position));
+    }
+    // Paper end
+
     @Override
     public BiomeSearchResult locateNearestBiome(Location origin, int radius, Biome... biomes) {
         return this.locateNearestBiome(origin, radius, 32, 64, biomes);
@@ -2365,4 +2437,46 @@ public class CraftWorld extends CraftRegionAccessor implements World {
     public void setSendViewDistance(final int viewDistance) {
     }
     // Paper end
+
+    // Purpur start
+    public float getLocalDifficultyAt(Location location) {
+        return getHandle().getCurrentDifficultyAt(io.papermc.paper.util.MCUtil.toBlockPosition(location)).getEffectiveDifficulty();
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration) {
+        sendBlockHighlight(location, duration, "", 0x6400FF00);
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, int argb) {
+        sendBlockHighlight(location, duration, "", argb);
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, String text) {
+        sendBlockHighlight(location, duration, text, 0x6400FF00);
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, String text, int argb) {
+        net.minecraft.network.protocol.game.DebugPackets.sendGameTestAddMarker(getHandle(), io.papermc.paper.util.MCUtil.toBlockPosition(location), text, argb, duration);
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, org.bukkit.Color color, int transparency) {
+        sendBlockHighlight(location, duration, "", color, transparency);
+    }
+
+    @Override
+    public void sendBlockHighlight(Location location, int duration, String text, org.bukkit.Color color, int transparency) {
+        if (transparency < 0 || transparency > 255) throw new IllegalArgumentException("transparency is outside of 0-255 range");
+        sendBlockHighlight(location, duration, text, transparency << 24 | color.asRGB());
+    }
+
+    @Override
+    public void clearBlockHighlights() {
+        net.minecraft.network.protocol.game.DebugPackets.sendGameTestClearPacket(getHandle());
+    }
+    // Purpur end
 }

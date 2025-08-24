@@ -16,8 +16,8 @@
  import com.mojang.brigadier.context.ContextChain;
  import com.mojang.brigadier.exceptions.CommandSyntaxException;
  import com.mojang.brigadier.tree.CommandNode;
- import com.mojang.brigadier.tree.RootCommandNode;
 +import com.mojang.brigadier.suggestion.SuggestionProvider;
+ import com.mojang.brigadier.tree.RootCommandNode;
  import com.mojang.logging.LogUtils;
  import java.util.Collection;
 +import java.util.LinkedHashSet;
@@ -29,14 +29,25 @@
  import java.util.function.Consumer;
  import java.util.function.Predicate;
  import java.util.function.UnaryOperator;
-@@ -43,7 +_,6 @@
- import net.minecraft.network.chat.ComponentUtils;
+@@ -40,10 +_,8 @@
+ import net.minecraft.network.chat.ClickEvent;
+ import net.minecraft.network.chat.CommonComponents;
+ import net.minecraft.network.chat.Component;
+-import net.minecraft.network.chat.ComponentUtils;
  import net.minecraft.network.chat.HoverEvent;
  import net.minecraft.network.chat.MutableComponent;
 -import net.minecraft.network.chat.Style;
  import net.minecraft.network.protocol.game.ClientboundCommandsPacket;
  import net.minecraft.resources.ResourceKey;
  import net.minecraft.server.MinecraftServer;
+@@ -58,7 +_,6 @@
+ import net.minecraft.server.commands.DamageCommand;
+ import net.minecraft.server.commands.DataPackCommand;
+ import net.minecraft.server.commands.DeOpCommands;
+-import net.minecraft.server.commands.DebugCommand;
+ import net.minecraft.server.commands.DebugConfigCommand;
+ import net.minecraft.server.commands.DebugMobSpawningCommand;
+ import net.minecraft.server.commands.DebugPathCommand;
 @@ -136,6 +_,8 @@
  import net.minecraft.tags.TagKey;
  import net.minecraft.util.profiling.jfr.JvmProfiler;
@@ -46,6 +57,15 @@
  import org.slf4j.Logger;
  
  public class Commands {
+@@ -158,7 +_,7 @@
+         DamageCommand.register(this.dispatcher, p_230944_);
+         DataCommands.register(this.dispatcher);
+         DataPackCommand.register(this.dispatcher);
+-        DebugCommand.register(this.dispatcher);
++        //DebugCommand.register(this.dispatcher); // Purpur
+         DefaultGameModeCommands.register(this.dispatcher);
+         DifficultyCommand.register(this.dispatcher);
+         EffectCommands.register(this.dispatcher, p_230944_);
 @@ -214,7 +_,7 @@
              JfrCommand.register(this.dispatcher);
          }
@@ -55,7 +75,20 @@
              TestCommand.register(this.dispatcher);
              RaidCommand.register(this.dispatcher, p_230944_);
              DebugPathCommand.register(this.dispatcher);
-@@ -248,7 +_,32 @@
+@@ -243,12 +_,45 @@
+             StopCommand.register(this.dispatcher);
+             TransferCommand.register(this.dispatcher);
+             WhitelistCommand.register(this.dispatcher);
++            org.purpurmc.purpur.command.CreditsCommand.register(this.dispatcher); // Purpur
++            org.purpurmc.purpur.command.DemoCommand.register(this.dispatcher); // Purpur
++            org.purpurmc.purpur.command.PingCommand.register(this.dispatcher); // Purpur
++            org.purpurmc.purpur.command.UptimeCommand.register(this.dispatcher); // Purpur
++            org.purpurmc.purpur.command.TPSBarCommand.register(this.dispatcher); // Purpur
++            org.purpurmc.purpur.command.CompassCommand.register(this.dispatcher); // Purpur
++            org.purpurmc.purpur.command.RamBarCommand.register(this.dispatcher); // Purpur
++            org.purpurmc.purpur.command.RamCommand.register(this.dispatcher); // Purpur
+         }
+ 
          if (p_230943_.includeIntegrated) {
              PublishCommand.register(this.dispatcher);
          }
@@ -128,7 +161,7 @@
 +
 +    public void performPrefixedCommand(CommandSourceStack commandlistenerwrapper, String s, String label) {
 +        s = s.startsWith("/") ? s.substring(1) : s;
-+        this.performCommand(this.dispatcher.parse(s, commandlistenerwrapper), s, label);
++        this.performCommandCB(this.dispatcher.parse(s, commandlistenerwrapper), s, label);
 +        // CraftBukkit end
 +    }
 +
@@ -137,13 +170,13 @@
 +    private static final AtomicReference<String> finishParsing$label = new AtomicReference<>();
 +    private final AtomicBoolean performCommand$throwCommandError = new AtomicBoolean(false);
 +
-+    public void performCommand(ParseResults<CommandSourceStack> pParseResults, String pCommand, String label) { // CraftBukkit
++    public void performCommandCB(ParseResults<CommandSourceStack> pParseResults, String pCommand, String label) { // CraftBukkit
 +        mohist$label.set(label);
 +        performCommand$throwCommandError.set(false);
 +        this.performCommand(pParseResults, pCommand);
 +    }
 +
-+    public void performCommand(ParseResults<CommandSourceStack> parseresults, String s, String label, boolean throwCommandError) {
++    public void performCommandCB(ParseResults<CommandSourceStack> parseresults, String s, String label, boolean throwCommandError) {
 +        mohist$label.set(label);
 +        performCommand$throwCommandError.set(throwCommandError);
 +        this.performCommand(parseresults, s);
@@ -181,7 +214,17 @@
                  StackTraceElement[] astacktraceelement = exception.getStackTrace();
  
                  for (int i = 0; i < Math.min(astacktraceelement.length, 3); i++) {
-@@ -318,7 +_,7 @@
+@@ -313,12 +_,16 @@
+             return ContextChain.tryFlatten(p_307220_.getContext().build(p_307311_))
+                 .orElseThrow(() -> CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherUnknownCommand().createWithContext(p_307220_.getReader()));
+         } catch (CommandSyntaxException commandsyntaxexception) {
+-            p_307676_.sendFailure(ComponentUtils.fromMessage(commandsyntaxexception.getRawMessage()));
++            // Paper start - Add UnknownCommandEvent
++            final net.kyori.adventure.text.TextComponent.Builder builder = net.kyori.adventure.text.Component.text();
++            // commandlistenerwrapper.sendFailure(ComponentUtils.fromMessage(commandsyntaxexception.getRawMessage()));
++            builder.color(net.kyori.adventure.text.format.NamedTextColor.RED).append(io.papermc.paper.brigadier.PaperBrigadier.componentFromMessage(commandsyntaxexception.getRawMessage()));
++            // Paper end - Add UnknownCommandEvent
+             if (commandsyntaxexception.getInput() != null && commandsyntaxexception.getCursor() >= 0) {
                  int i = Math.min(commandsyntaxexception.getInput().length(), commandsyntaxexception.getCursor());
                  MutableComponent mutablecomponent = Component.empty()
                      .withStyle(ChatFormatting.GRAY)
@@ -190,7 +233,26 @@
                  if (i > 10) {
                      mutablecomponent.append(CommonComponents.ELLIPSIS);
                  }
-@@ -359,11 +_,65 @@
+@@ -331,7 +_,17 @@
+                 }
+ 
+                 mutablecomponent.append(Component.translatable("command.context.here").withStyle(ChatFormatting.RED, ChatFormatting.ITALIC));
+-                p_307676_.sendFailure(mutablecomponent);
++                // Paper start - Add UnknownCommandEvent
++                // commandlistenerwrapper.sendFailure(mutablecomponent);
++                builder
++                        .append(net.kyori.adventure.text.Component.newline())
++                        .append(io.papermc.paper.adventure.PaperAdventure.asAdventure(mutablecomponent));
++            }
++            org.bukkit.event.command.UnknownCommandEvent event = new org.bukkit.event.command.UnknownCommandEvent(p_307676_.getBukkitSender(), p_307311_, org.spigotmc.SpigotConfig.unknownCommandMessage.isEmpty() ? null : builder.build());
++            org.bukkit.Bukkit.getServer().getPluginManager().callEvent(event);
++            if (event.message() != null) {
++                p_307676_.sendFailure(io.papermc.paper.adventure.PaperAdventure.asVanilla(event.message()), false);
++                // Paper end - Add UnknownCommandEvent
+             }
+ 
+             return null;
+@@ -359,11 +_,67 @@
      }
  
      public void sendCommands(ServerPlayer p_82096_) {
@@ -246,6 +308,7 @@
 +    private void runSync(ServerPlayer player, Collection<String> bukkit, RootCommandNode<SharedSuggestionProvider> rootcommandnode) {
 +        // Paper end - Perf: Async command map building
 +        new io.papermc.paper.event.brigadier.AsyncPlayerSendCommandsEvent<CommandSourceStack>(player.getBukkitEntity(), (RootCommandNode) rootcommandnode, true).callEvent(); // Paper - Brigadier API
++        if (PlayerCommandSendEvent.getHandlerList().getRegisteredListeners().length > 0) { // Purpur - skip all this crap if there's nothing listening
 +        PlayerCommandSendEvent event = new PlayerCommandSendEvent(player.getBukkitEntity(), new LinkedHashSet<>(bukkit));
 +        event.getPlayer().getServer().getPluginManager().callEvent(event);
 +
@@ -256,6 +319,7 @@
 +            }
 +        }
 +        // CraftBukkit end
++        } // Purpur - skip event
 +        player.connection.send(new ClientboundCommandsPacket(rootcommandnode));
      }
  

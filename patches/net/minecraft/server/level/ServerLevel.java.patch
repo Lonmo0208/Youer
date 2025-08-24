@@ -153,12 +153,7 @@
      private final MinecraftServer server;
      public final ServerLevelData serverLevelData;
      private int lastSpawnChunkRadius;
-@@ -195,16 +_,72 @@
-     protected final Raids raids;
-     private final ObjectLinkedOpenHashSet<BlockEventData> blockEvents = new ObjectLinkedOpenHashSet<>();
-     private final List<BlockEventData> blockEventsToReschedule = new ArrayList<>(64);
-+    @Getter
-     private boolean handlingTick;
+@@ -199,12 +_,83 @@
      private final List<CustomSpawner> customSpawners;
      @Nullable
      private EndDragonFight dragonFight;
@@ -175,10 +170,15 @@
 +    public ResourceKey<LevelStem> typeKey;
 +    public boolean hasEntityMoveEvent; // Paper - Add EntityMoveEvent
 +    public boolean hasPhysicsEvent = true; // Paper - BlockPhysicsEvent
++    public boolean hasRidableMoveEvent = false; // Purpur
 +
 +    @Override
 +    public ResourceKey<LevelStem> getTypeKey() {
 +        return typeKey == null ? super.getTypeKey() : typeKey;
++    }
++
++    public CraftWorld getWorld() {
++        return this.world;
 +    }
 +
 +    // Paper start
@@ -223,11 +223,22 @@
 +        return player != null && player.level() == this ? player : null;
 +    }
 +    // Paper end - optimise getPlayerByUUID
++    // Paper start - lag compensation
++    private long lagCompensationTick = net.minecraft.server.MinecraftServer.SERVER_INIT;
++
++    public long getLagCompensationTick() {
++        return this.lagCompensationTick;
++    }
++
++    public void updateLagCompensationTick() {
++        this.lagCompensationTick = (System.nanoTime() - net.minecraft.server.MinecraftServer.SERVER_INIT) / (java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(50L));
++    }
++    // Paper end - lag compensation
 +
      public ServerLevel(
          MinecraftServer p_214999_,
          Executor p_215000_,
-@@ -230,11 +_,67 @@
+@@ -230,11 +_,68 @@
              p_215007_,
              p_214999_.getMaxChainedNeighborUpdates()
          );
@@ -293,6 +304,7 @@
 +                        p_214999_.registryAccess(),
 +                        (K != null ? K.getGameRules() : serverLevelData.getGameRules())));
 +        this.paperConfig = paperWorldConfigCreator.apply(this.spigotConfig); // Paper - create paper world config
++        this.purpurConfig = new org.purpurmc.purpur.PurpurWorldConfig(name, environment); // Purpur
          boolean flag = p_214999_.forceSynchronousWrites();
          DataFixer datafixer = p_214999_.getFixerUpper();
          EntityPersistentStorage<Entity> entitypersistentstorage = new EntityStorage(
@@ -444,7 +456,7 @@
              }
          }
      }
-@@ -471,19 +_,20 @@
+@@ -471,12 +_,12 @@
          int j = chunkpos.getMinBlockZ();
          ProfilerFiller profilerfiller = this.getProfiler();
          profilerfiller.push("thunder");
@@ -454,12 +466,12 @@
              if (this.isRainingAt(blockpos)) {
                  DifficultyInstance difficultyinstance = this.getCurrentDifficultyAt(blockpos);
                  boolean flag1 = this.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING)
-                     && this.random.nextDouble() < (double)difficultyinstance.getEffectiveDifficulty() * 0.01
--                    && !this.getBlockState(blockpos.below()).is(Blocks.LIGHTNING_ROD);
-+                    && !(this.getBlockState(blockpos.below()).getBlock() instanceof net.minecraft.world.level.block.LightningRodBlock); // Neo: support custom LightningRodBlocks
+-                    && this.random.nextDouble() < (double)difficultyinstance.getEffectiveDifficulty() * 0.01
++                    && this.random.nextDouble() < (double)difficultyinstance.getEffectiveDifficulty() * this.paperConfig().entities.spawning.skeletonHorseThunderSpawnChance.or(0.01D)
+                     && !this.getBlockState(blockpos.below()).is(Blocks.LIGHTNING_ROD);
                  if (flag1) {
                      SkeletonHorse skeletonhorse = EntityType.SKELETON_HORSE.create(this);
-                     if (skeletonhorse != null) {
+@@ -484,6 +_,7 @@
                          skeletonhorse.setTrap(true);
                          skeletonhorse.setAge(0);
                          skeletonhorse.setPos((double)blockpos.getX(), (double)blockpos.getY(), (double)blockpos.getZ());
@@ -534,12 +546,15 @@
          Optional<BlockPos> optional = this.getPoiManager()
              .findClosest(
                  p_215059_ -> p_215059_.is(PoiTypes.LIGHTNING_ROD),
-@@ -582,7 +_,7 @@
+@@ -582,7 +_,10 @@
          return optional.map(p_184053_ -> p_184053_.above(1));
      }
  
 -    protected BlockPos findLightningTargetAround(BlockPos p_143289_) {
++    public AtomicBoolean findLightningTargetAround$returnNullWhenNoTarget = new AtomicBoolean(false);
++
 +    public BlockPos findLightningTargetAround(BlockPos p_143289_) {
++        // Paper end - Add methods to find targets for lightning strikes
          BlockPos blockpos = this.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, p_143289_);
          Optional<BlockPos> optional = this.findLightningRod(blockpos);
          if (optional.isPresent()) {
@@ -553,21 +568,21 @@
              if (!list.isEmpty()) {
                  return list.get(this.random.nextInt(list.size())).blockPosition();
              } else {
-+
++                if (findLightningTargetAround$returnNullWhenNoTarget.getAndSet(false)) return null; // Paper - Add methods to find targets for lightning strikes
                  if (blockpos.getY() == this.getMinBuildHeight() - 1) {
                      blockpos = blockpos.above(2);
                  }
-@@ -604,10 +_,6 @@
+@@ -603,6 +_,10 @@
+             }
          }
      }
++    public BlockPos findLightningTargetAround(BlockPos p_143289_, boolean returnNullWhenNoTarget) {
++        findLightningTargetAround$returnNullWhenNoTarget.set(returnNullWhenNoTarget);
++        return findLightningTargetAround(p_143289_);
++    }
  
--    public boolean isHandlingTick() {
--        return this.handlingTick;
--    }
--
-     public boolean canSleepThroughNights() {
-         return this.getGameRules().getInt(GameRules.RULE_PLAYERS_SLEEPING_PERCENTAGE) <= 100;
-     }
+     public boolean isHandlingTick() {
+         return this.handlingTick;
 @@ -714,15 +_,19 @@
                  .broadcastAll(new ClientboundGameEventPacket(ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE, this.thunderLevel), this.dimension());
          }
@@ -722,7 +737,7 @@
          Entity entity = this.getEntities().get(p_8854_.getUUID());
          if (entity != null) {
              LOGGER.warn("Force-added player with duplicate UUID {}", p_8854_.getUUID());
-@@ -903,15 +_,45 @@
+@@ -903,15 +_,58 @@
              this.removePlayerImmediately((ServerPlayer)entity, Entity.RemovalReason.DISCARDED);
          }
  
@@ -733,6 +748,11 @@
  
      private boolean addEntity(Entity p_8873_) {
 +        p_8873_.generation = false; // Paper - Don't fire sync event during generation; Reset flag if it was added during a ServerLevel generation process
++        // Paper start - extra debug info
++        if (p_8873_.valid) {
++            return true;
++        }
++        // Paper end - extra debug info
          if (p_8873_.isRemoved()) {
 -            LOGGER.warn("Tried to add entity {} but it was marked as removed already", EntityType.getKey(p_8873_.getType()));
 -            return false;
@@ -743,8 +763,16 @@
 +        } else {
 +            if (p_8873_ instanceof Villager && YouerConfig.custom_no_villager) return false;
 +            if (BanEntity.check(p_8873_)) {
++                p_8873_.discard();
 +                return false;
 +            }
++            if (p_8873_ instanceof net.minecraft.world.entity.item.ItemEntity itemEntity && itemEntity.getItem().isEmpty()) return false; // Paper - Prevent empty items from being added
++            // Paper start - capture all item additions to the world
++            if (captureDrops != null && p_8873_ instanceof net.minecraft.world.entity.item.ItemEntity) {
++                captureDrops.add((net.minecraft.world.entity.item.ItemEntity) p_8873_);
++                return true;
++            }
++            // Paper end - capture all item additions to the world
 +            if (!AsyncCatcher.catchAsync() && p_8873_.spawnReason != null && !CraftEventFactory.doEntityAddEventCalling(this, p_8873_, p_8873_.spawnReason)) {
 +                return false;
 +            }
@@ -974,6 +1002,16 @@
          this.getServer().overworld().getDataStorage().set(p_323697_.key(), p_143306_);
      }
  
+@@ -1326,7 +_,9 @@
+         BlockPos blockpos = this.levelData.getSpawnPos();
+         float f = this.levelData.getSpawnAngle();
+         if (!blockpos.equals(p_8734_) || f != p_8735_) {
++            org.bukkit.Location prevSpawnLoc = this.getWorld().getSpawnLocation(); // Paper - Call SpawnChangeEvent
+             this.levelData.setSpawn(p_8734_, p_8735_);
++            new org.bukkit.event.world.SpawnChangeEvent(this.getWorld(), prevSpawnLoc).callEvent(); // Paper - Call SpawnChangeEvent
+             this.getServer().getPlayerList().broadcastAll(new ClientboundSetDefaultSpawnPositionPacket(p_8734_, p_8735_));
+         }
+ 
 @@ -1525,6 +_,11 @@
      @Override
      public void blockUpdated(BlockPos p_8743_, Block p_8744_) {
@@ -1001,6 +1039,25 @@
      }
  
      @Nullable
+@@ -1688,11 +_,18 @@
+         }
+ 
+         public void onTickingStart(Entity p_143363_) {
++            if (p_143363_ instanceof net.minecraft.world.entity.Marker && !paperConfig().entities.markers.tick) return; // Paper - Configurable marker ticking
+             ServerLevel.this.entityTickList.add(p_143363_);
+         }
+ 
+         public void onTickingEnd(Entity p_143367_) {
+             ServerLevel.this.entityTickList.remove(p_143367_);
++            // Paper start - Reset pearls when they stop being ticked
++            if (paperConfig().fixes.disableUnloadedChunkEnderpearlExploit && p_143367_ instanceof net.minecraft.world.entity.projectile.ThrownEnderpearl pearl) {
++                pearl.cachedOwner = null;
++                pearl.ownerUUID = null;
++            }
++            // Paper end - Reset pearls when they stop being ticked
+         }
+ 
+         public void onTrackingStart(Entity p_143371_) {
 @@ -1713,16 +_,58 @@
                  ServerLevel.this.navigatingMobs.add(mob);
              }

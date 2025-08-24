@@ -2,6 +2,7 @@ package org.bukkit.craftbukkit.entity;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
+import io.papermc.paper.entity.TargetEntityInfo;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -209,9 +210,46 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
         return blocks.get(0);
     }
 
+    // Paper start
+    @Override
+    public Block getTargetBlock(int maxDistance, io.papermc.paper.block.TargetBlockInfo.FluidMode fluidMode) {
+        return this.getTargetBlockExact(maxDistance, fluidMode.bukkit);
+    }
+
+    @Override
+    public org.bukkit.block.BlockFace getTargetBlockFace(int maxDistance, io.papermc.paper.block.TargetBlockInfo.FluidMode fluidMode) {
+        return this.getTargetBlockFace(maxDistance, fluidMode.bukkit);
+    }
+
+    @Override
+    public org.bukkit.block.BlockFace getTargetBlockFace(int maxDistance, org.bukkit.FluidCollisionMode fluidMode) {
+        RayTraceResult result = this.rayTraceBlocks(maxDistance, fluidMode);
+        return result != null ? result.getHitBlockFace() : null;
+    }
+
+    @Override
+    public io.papermc.paper.block.TargetBlockInfo getTargetBlockInfo(int maxDistance, io.papermc.paper.block.TargetBlockInfo.FluidMode fluidMode) {
+        RayTraceResult result = this.rayTraceBlocks(maxDistance, fluidMode.bukkit);
+        if (result != null && result.getHitBlock() != null && result.getHitBlockFace() != null) {
+            return new io.papermc.paper.block.TargetBlockInfo(result.getHitBlock(), result.getHitBlockFace());
+        }
+        return null;
+    }
+
     public Entity getTargetEntity(int maxDistance, boolean ignoreBlocks) {
         net.minecraft.world.phys.EntityHitResult rayTrace = rayTraceEntity(maxDistance, ignoreBlocks);
         return rayTrace == null ? null : rayTrace.getEntity().getBukkitEntity();
+    }
+
+    public TargetEntityInfo getTargetEntityInfo(int maxDistance, boolean ignoreBlocks) {
+        net.minecraft.world.phys.EntityHitResult rayTrace = rayTraceEntity(maxDistance, ignoreBlocks);
+        return rayTrace == null ? null : new TargetEntityInfo(rayTrace.getEntity().getBukkitEntity(), new org.bukkit.util.Vector(rayTrace.getLocation().x, rayTrace.getLocation().y, rayTrace.getLocation().z));
+    }
+
+    @Override
+    public RayTraceResult rayTraceEntities(int maxDistance, boolean ignoreBlocks) {
+        net.minecraft.world.phys.EntityHitResult rayTrace = this.rayTraceEntity(maxDistance, ignoreBlocks);
+        return rayTrace == null ? null : new org.bukkit.util.RayTraceResult(org.bukkit.craftbukkit.util.CraftVector.toBukkit(rayTrace.getLocation()), rayTrace.getEntity().getBukkitEntity());
     }
 
     public net.minecraft.world.phys.EntityHitResult rayTraceEntity(int maxDistance, boolean ignoreBlocks) {
@@ -230,6 +268,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
         }
         return rayTrace;
     }
+    // Paper end
 
     @Override
     public List<Block> getLastTwoTargetBlocks(Set<Material> transparent, int maxDistance) {
@@ -486,7 +525,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
 
     @Override
     public boolean addPotionEffect(PotionEffect effect, boolean force) {
-        this.getHandle().addEffect(new MobEffectInstance(CraftPotionEffectType.bukkitToMinecraftHolder(effect.getType()), effect.getDuration(), effect.getAmplifier(), effect.isAmbient(), effect.hasParticles()), EntityPotionEffectEvent.Cause.PLUGIN);
+        this.getHandle().addEffect(org.bukkit.craftbukkit.potion.CraftPotionUtil.fromBukkit(effect), EntityPotionEffectEvent.Cause.PLUGIN); // Paper - Don't ignore icon
         return true;
     }
 
@@ -507,7 +546,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
     @Override
     public PotionEffect getPotionEffect(PotionEffectType type) {
         MobEffectInstance handle = this.getHandle().getEffect(CraftPotionEffectType.bukkitToMinecraftHolder(type));
-        return (handle == null) ? null : new PotionEffect(CraftPotionEffectType.minecraftHolderToBukkit(handle.getEffect()), handle.getDuration(), handle.getAmplifier(), handle.isAmbient(), handle.isVisible());
+        return (handle == null) ? null : org.bukkit.craftbukkit.potion.CraftPotionUtil.toBukkit(handle); // Paper
     }
 
     @Override
@@ -519,7 +558,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
     public Collection<PotionEffect> getActivePotionEffects() {
         List<PotionEffect> effects = new ArrayList<PotionEffect>();
         for (MobEffectInstance handle : this.getHandle().activeEffects.values()) {
-            effects.add(new PotionEffect(CraftPotionEffectType.minecraftHolderToBukkit(handle.getEffect()), handle.getDuration(), handle.getAmplifier(), handle.isAmbient(), handle.isVisible()));
+            effects.add(org.bukkit.craftbukkit.potion.CraftPotionUtil.toBukkit(handle)); // Paper
         }
         return effects;
     }
@@ -1032,6 +1071,29 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
     }
     // Paper end - active item API
 
+    // Paper start - entity jump API
+    @Override
+    public boolean isJumping() {
+        return getHandle().jumping;
+    }
+
+    @Override
+    public void setJumping(boolean jumping) {
+        getHandle().setJumping(jumping);
+        if (jumping && getHandle() instanceof Mob) {
+            // this is needed to actually make a mob jump
+            ((Mob) getHandle()).getJumpControl().jump();
+        }
+    }
+    // Paper end - entity jump API
+
+    // Paper start - pickup animation API
+    @Override
+    public void playPickupItemAnimation(final org.bukkit.entity.Item item, final int quantity) {
+        this.getHandle().take(((CraftItem) item).getHandle(), quantity);
+    }
+    // Paper end - pickup animation API
+
     // Paper start - Expose canUseSlot
     @Override
     public boolean canUseEquipmentSlot(org.bukkit.inventory.EquipmentSlot slot) {
@@ -1059,6 +1121,63 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
     };
     // Paper end - knockback API
 
+    // Paper start - ItemStack damage API
+    public void broadcastSlotBreak(final org.bukkit.inventory.EquipmentSlot slot) {
+        this.getHandle().level().broadcastEntityEvent(this.getHandle(), net.minecraft.world.entity.LivingEntity.entityEventForEquipmentBreak(org.bukkit.craftbukkit.CraftEquipmentSlot.getNMS(slot)));
+    }
+
+    @Override
+    public void broadcastSlotBreak(final org.bukkit.inventory.EquipmentSlot slot, final Collection<org.bukkit.entity.Player> players) {
+        if (players.isEmpty()) {
+            return;
+        }
+        final net.minecraft.network.protocol.game.ClientboundEntityEventPacket packet = new net.minecraft.network.protocol.game.ClientboundEntityEventPacket(
+                this.getHandle(),
+                net.minecraft.world.entity.LivingEntity.entityEventForEquipmentBreak(org.bukkit.craftbukkit.CraftEquipmentSlot.getNMS(slot))
+        );
+        players.forEach(player -> ((CraftPlayer) player).getHandle().connection.send(packet));
+    }
+
+    @Override
+    public ItemStack damageItemStack(ItemStack stack, final int amount) {
+        final net.minecraft.world.item.ItemStack nmsStack;
+        if (stack instanceof final CraftItemStack craftItemStack) {
+            if (craftItemStack.handle == null || craftItemStack.handle.isEmpty()) {
+                return stack;
+            }
+            nmsStack = craftItemStack.handle;
+        } else {
+            nmsStack = CraftItemStack.asNMSCopy(stack);
+            stack = CraftItemStack.asCraftMirror(nmsStack); // mirror to capture changes in hurt logic & events
+        }
+        this.damageItemStack0(nmsStack, amount, null);
+        return stack;
+    }
+
+    @Override
+    public void damageItemStack(final org.bukkit.inventory.EquipmentSlot slot, final int amount) {
+        final net.minecraft.world.entity.EquipmentSlot nmsSlot = org.bukkit.craftbukkit.CraftEquipmentSlot.getNMS(slot);
+        this.damageItemStack0(this.getHandle().getItemBySlot(nmsSlot), amount, nmsSlot);
+    }
+
+    private void damageItemStack0(final net.minecraft.world.item.ItemStack nmsStack, final int amount, final net.minecraft.world.entity.EquipmentSlot slot) {
+        nmsStack.hurtAndBreak(amount, this.getHandle(), slot, true);
+    }
+    // Paper end - ItemStack damage API
+    // Paper start - friction API
+    @org.jetbrains.annotations.NotNull
+    @Override
+    public net.kyori.adventure.util.TriState getFrictionState() {
+        return this.getHandle().frictionState;
+    }
+
+    @Override
+    public void setFrictionState(@org.jetbrains.annotations.NotNull net.kyori.adventure.util.TriState state) {
+        java.util.Objects.requireNonNull(state, "state may not be null");
+        this.getHandle().frictionState = state;
+    }
+    // Paper end - friction API
+
     // Paper start - body yaw API
     @Override
     public float getBodyYaw() {
@@ -1070,4 +1189,16 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
         this.getHandle().setYBodyRot(bodyYaw);
     }
     // Paper end - body yaw API
+
+    // Purpur start - API for any mob to burn daylight
+    @Override
+    public boolean shouldBurnInDay() {
+        return this.getHandle().shouldBurnInDay();
+    }
+
+    @Override
+    public void setShouldBurnInDay(final boolean shouldBurnInDay) {
+        this.getHandle().setShouldBurnInDay(shouldBurnInDay);
+    }
+    // Purpur end - API for any mob to burn daylight
 }

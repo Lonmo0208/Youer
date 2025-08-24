@@ -77,6 +77,37 @@
      public Vec3 getPosition() {
          return this.worldPosition;
      }
+@@ -477,6 +_,30 @@
+         }
+     }
+ 
++    // Purpur start
++    public void sendSuccess(@Nullable String message) {
++        sendSuccess(message, false);
++    }
++
++    public void sendSuccess(@Nullable String message, boolean broadcastToOps) {
++        if (message == null) {
++            return;
++        }
++        sendSuccess(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(message), broadcastToOps);
++    }
++
++    public void sendSuccess(@Nullable net.kyori.adventure.text.Component message) {
++        sendSuccess(message, false);
++    }
++
++    public void sendSuccess(@Nullable net.kyori.adventure.text.Component message, boolean broadcastToOps) {
++        if (message == null) {
++            return;
++        }
++        sendSuccess(() -> io.papermc.paper.adventure.PaperAdventure.asVanilla(message), broadcastToOps);
++    }
++    // Purpur end
++
+     public void sendSuccess(Supplier<Component> p_288979_, boolean p_289007_) {
+         boolean flag = this.source.acceptsSuccess() && !this.silent;
+         boolean flag1 = p_289007_ && this.source.shouldInformAdmins() && !this.silent;
 @@ -496,7 +_,7 @@
          Component component = Component.translatable("chat.type.admin", this.getDisplayName(), p_81367_).withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC);
          if (this.server.getGameRules().getBoolean(GameRules.RULE_SENDCOMMANDFEEDBACK)) {
@@ -86,6 +117,21 @@
                      serverplayer.sendSystemMessage(component);
                  }
              }
+@@ -508,8 +_,13 @@
+     }
+ 
+     public void sendFailure(Component p_81353_) {
++        // Paper start - Add UnknownCommandEvent
++        this.sendFailure(p_81353_, true);
++    }
++    public void sendFailure(Component p_81353_, boolean withStyle) {
++        // Paper end - Add UnknownCommandEvent
+         if (this.source.acceptsFailure() && !this.silent) {
+-            this.source.sendSystemMessage(Component.empty().append(p_81353_).withStyle(ChatFormatting.RED));
++            this.source.sendSystemMessage(withStyle ? Component.empty().append(p_81353_).withStyle(ChatFormatting.RED) : p_81353_); // Paper - Add UnknownCommandEvent
+         }
+     }
+ 
 @@ -591,4 +_,11 @@
      public boolean isSilent() {
          return this.silent;
