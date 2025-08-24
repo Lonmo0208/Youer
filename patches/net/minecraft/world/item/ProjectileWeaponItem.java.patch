@@ -87,6 +87,7 @@
                  p_330646_.hurtAndBreak(this.getDurabilityUse(itemstack), p_330728_, LivingEntity.getSlotForHand(p_331152_));
                  if (p_330646_.isEmpty()) {
                      break;
+
 @@ -92,8 +_,10 @@
              abstractarrow.setCritArrow(true);
          }
@@ -98,6 +99,7 @@
 +    protected static AtomicBoolean draw$consume = new AtomicBoolean(true);
  
      protected static List<ItemStack> draw(ItemStack p_331565_, ItemStack p_330406_, LivingEntity p_330823_) {
+
          if (p_330406_.isEmpty()) {
 @@ -104,7 +_,7 @@
              ItemStack itemstack1 = p_330406_.copy();

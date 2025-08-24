@@ -5,6 +5,8 @@ pluginManagement {
         maven { url = 'https://hub.spigotmc.org/nexus/content/groups/public/' }
         maven { url = 'https://maven.mohistmc.com/' }
         maven { url = 'https://maven.neoforged.net/releases' }
+        maven { url = 'https://mvnrepository.com/artifact' }
+        maven { url = 'https://mvnrepository.com/' }
     }
 }
 
@@ -30,6 +32,8 @@ dependencyResolutionManagement {
         maven { url = 'https://maven.mohistmc.cn/releases'}
         maven { url = "https://repo.papermc.io/repository/maven-public/" }
         maven { url = "https://jitpack.io" }
+        maven { url = 'https://mvnrepository.com/artifact' }
+        maven { url = 'https://mvnrepository.com/' }
     }
 }
 

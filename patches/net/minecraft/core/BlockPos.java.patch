@@ -96,6 +96,63 @@
 +                return new BlockPos(this.getX() + p_121946_.getStepX(), this.getY() + p_121946_.getStepY(), this.getZ() + p_121946_.getStepZ());
 +        }
 +        // Paper end - Perf: Optimize BlockPosition
++    }
++
++    public BlockPos mth_suppAbove() {
++        BlockPos p_122036_ = this.above();
++        return p_122036_;
++    }
++
++    public BlockPos mth_suppAbove(int p_121972_) {
++        BlockPos p_122037_ = this.above(p_121972_);
++        return p_122037_;
++    }
++
++    public BlockPos mth_suppBelow() {
++        BlockPos p_122038_ = this.below();
++        return p_122038_;
++    }
++
++    public BlockPos mth_suppBelow(int p_122000_) {
++        BlockPos p_122039_ = this.below(p_122000_);
++        return p_122039_;
++    }
++
++    public BlockPos mth_suppAtY(int p_175289_) {
++        BlockPos p_122040_ = new BlockPos(this.getX(), p_175289_, this.getZ());
++        return p_122040_;
      }
  
      public BlockPos relative(Direction p_121948_, int p_121949_) {
+@@ -538,6 +_,31 @@
+         @Override
+         public BlockPos rotate(Rotation p_122138_) {
+             return super.rotate(p_122138_).immutable();
++        }
++
++        @Override
++        public BlockPos mth_suppAbove() {
++            return super.mth_suppAbove();
++        }
++
++        @Override
++        public BlockPos mth_suppAbove(int p_121972_) {
++            return super.mth_suppAbove(p_121972_);
++        }
++
++        @Override
++        public BlockPos mth_suppBelow() {
++            return super.mth_suppBelow();
++        }
++
++        @Override
++        public BlockPos mth_suppBelow(int p_122000_) {
++            return super.mth_suppBelow(p_122000_);
++        }
++
++        @Override
++        public BlockPos mth_suppAtY(int p_175289_) {
++            return super.mth_suppAtY(p_175289_);
+         }
+ 
+         public BlockPos.MutableBlockPos set(int p_122179_, int p_122180_, int p_122181_) {
